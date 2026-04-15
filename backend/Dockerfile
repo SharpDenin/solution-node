@@ -4,6 +4,8 @@ WORKDIR /app
 
 RUN go install github.com/air-verse/air@latest
 
+ENV CGO_ENABLED=0
+
 COPY go.mod ./
 RUN go mod download
 

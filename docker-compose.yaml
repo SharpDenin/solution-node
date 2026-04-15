@@ -6,28 +6,43 @@ services:
     container_name: report_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: report_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5470:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  migrate:
+    image: migrate/migrate
+    container_name: report_migrate
+    restart: on-failure
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend/migrations:/migrations
+    command: [
+      "-path=/migrations",
+      "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable",
+      "up"
+    ]
+
   backend:
     build: ./backend
     container_name: report_backend
     restart: always
-    volumes:
-      - ./backend:/app
     depends_on:
       - postgres
+    volumes:
+      - ./backend:/app
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5470
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: report_db
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      SERVER_PORT: ${SERVER_PORT}
     ports:
       - "8090:8080"
 

@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: report_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: report_db
+    ports:
+      - "5470:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: report_backend
+    restart: always
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5470
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: report_db
+    ports:
+      - "8090:8080"
+
+  frontend:
+    build: ./frontend
+    container_name: report_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3010:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:

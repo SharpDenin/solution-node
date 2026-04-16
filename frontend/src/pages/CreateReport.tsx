@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Question, AnswerPayload } from '../types';
-import { decodeToken } from '../utils/token';
 
 export const CreateReport = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -14,27 +13,20 @@ export const CreateReport = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Загружаем только активные вопросы
     api.get('/questions')
       .then(res => {
+        // Фильтруем только активные вопросы
         const active = res.data.filter((q: Question) => q.is_active === true);
         const sorted = active.sort((a: Question, b: Question) => a.order_index - b.order_index);
         setQuestions(sorted);
       })
       .catch(err => console.error('Ошибка загрузки вопросов', err));
-
-    // Попытка получить ФИО пользователя (если есть)
-    const payload = decodeToken();
-    if (payload) {
-      // Если в токене нет full_name, оставляем поле пустым
-      setResponsible('');
-    }
   }, []);
 
   const updateAnswer = (qId: string, answer_text: string) => {
     setAnswers(prev => ({
       ...prev,
-      [qId]: { ...prev[qId], question_id: qId, answer_text },
+      [qId]: { question_id: qId, answer_text },
     }));
   };
 
@@ -55,14 +47,13 @@ export const CreateReport = () => {
         },
       }));
     } catch (err) {
-      console.error('Ошибка загрузки изображения', err);
-      alert('Не удалось загрузить изображение');
+      alert('Ошибка загрузки изображения');
     }
   };
 
   const handleSubmit = async () => {
     if (!place || !date || Object.keys(answers).length === 0) {
-      alert('Пожалуйста, заполните место, дату и ответьте хотя бы на один вопрос');
+      alert('Заполните место, дату и ответьте хотя бы на один вопрос');
       return;
     }
     setLoading(true);
@@ -74,14 +65,16 @@ export const CreateReport = () => {
         answers: Object.values(answers).map(a => ({
           question_id: a.question_id,
           answer_text: a.answer_text,
-          image_url: a.image_url,
+          image_url: a.image_url || '',
         })),
       };
+      console.log('Отправляемые данные:', payload); // <- посмотрите в консоли браузера
       await api.post('/reports', payload);
       navigate('/thank-you');
-    } catch (err) {
-      console.error('Ошибка отправки отчёта', err);
-      alert('Ошибка при отправке отчёта');
+    } catch (err: any) {
+      console.error('Ошибка:', err);
+      const message = err.response?.data || 'Ошибка при отправке отчёта';
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -130,7 +123,7 @@ export const CreateReport = () => {
             if (file) uploadImage(q.id, file);
           }} />
           {answers[q.id]?.image_url && (
-            <img src={answers[q.id].image_url} style={styles.image} alt="загруженное фото" />
+            <img src={answers[q.id].image_url} style={styles.image} alt="фото" />
           )}
         </div>
       ))}

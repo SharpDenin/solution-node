@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"log"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 type DB struct {
 	Pool *pgxpool.Pool
 }
+
+type Tx = pgx.Tx
 
 func NewDB(cfg *config.Config) *DB {
 	dsn := fmt.Sprintf(
@@ -42,4 +45,8 @@ func NewDB(cfg *config.Config) *DB {
 	return &DB{
 		Pool: pool,
 	}
+}
+
+func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	return db.Pool.Begin(ctx)
 }

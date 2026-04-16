@@ -1,37 +1,65 @@
 package main
 
 import (
+	"backend/internal/middleware"
+	"backend/internal/service/report_service"
 	"log"
 	"net/http"
 
 	"backend/internal/config"
-	"backend/internal/handlers"
+	"backend/internal/handler"
 	"backend/internal/repository"
-	"backend/internal/service/auth"
+	"backend/internal/service/auth_service"
 )
 
 func main() {
 	cfg := config.LoadConfig()
 
-	// DB
 	db := repository.NewDB(cfg)
-
-	// repo
 	userRepo := repository.NewUserRepository(db)
 
-	// jwt
-	jwtManager := auth.NewJWTManager()
+	jwtManager := auth_service.NewJWTManager()
+	authService := auth_service.NewAuthService(userRepo, jwtManager)
+	authHandler := handler.NewAuthHandler(authService)
 
-	// service
-	authService := auth.NewAuthService(userRepo, jwtManager)
+	reportRepo := repository.NewReportRepository(db)
+	reportService := report_service.NewReportService(db, reportRepo)
+	reportHandler := handler.NewReportHandler(reportService)
 
-	// handler
-	authHandler := handlers.NewAuthHandler(authService)
+	mux := http.NewServeMux()
 
-	// routes
-	http.HandleFunc("/register", authHandler.Register)
-	http.HandleFunc("/login", authHandler.Login)
+	mux.HandleFunc("/register", authHandler.Register)
+	mux.HandleFunc("/login", authHandler.Login)
+
+	protected := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Context().Value(middleware.UserIDKey)
+		role := r.Context().Value(middleware.RoleKey)
+
+		w.Write([]byte("Hello user " + userID.(string) + " role: " + role.(string)))
+	})
+
+	mux.Handle("/me",
+		middleware.AuthMiddleware(jwtManager)(
+			protected,
+		),
+	)
+
+	mux.Handle("/admin",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("admin only"))
+				}),
+			),
+		),
+	)
+
+	mux.Handle("/reports",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(reportHandler.CreateReport),
+		),
+	)
 
 	log.Println("Server running on :" + cfg.ServerPort)
-	http.ListenAndServe(":"+cfg.ServerPort, nil)
+	http.ListenAndServe(":"+cfg.ServerPort, mux)
 }

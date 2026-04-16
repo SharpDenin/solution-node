@@ -9,16 +9,10 @@ CREATE TABLE users (
                        created_at TIMESTAMP DEFAULT now()
 );
 
-CREATE TABLE places (
-                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                        name TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT now()
-);
-
 CREATE TABLE reports (
                          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                          user_id UUID REFERENCES users(id),
-                         place_id UUID REFERENCES places(id),
+                         place TEXT NOT NULL,
                          report_date DATE NOT NULL,
                          responsible_name TEXT NOT NULL,
                          created_at TIMESTAMP DEFAULT now()
@@ -42,4 +36,4 @@ CREATE TABLE answers (
 );
 
 INSERT INTO users (full_name, login, password_hash, role)
-VALUES ('Admin', 'admin', 'snAdmin01', 'admin');
+VALUES ('Admin', 'admin', '$2a$10$ODPCO0OS3NsI/YxLkUaRtuRYQnNXXSlz3VwWmF2JNdy/oZ./dpzXe', 'admin');

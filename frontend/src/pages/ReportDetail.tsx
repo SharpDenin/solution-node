@@ -1,73 +1,41 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { api } from '../api/client';
+import type { ReportDetail as ReportDetailType } from '../types';
 
-type Answer = {
-  question_id: string;
-  question_text: string;
-  answer_text: string;
-  image_url?: string;
-};
-
-type Report = {
-  id: string;
-  place: string;
-  report_date: string;
-  responsible_name: string;
-  answers: Answer[];
-};
-
-export default function ReportDetail() {
+export const ReportDetail = () => {
   const { id } = useParams();
-  const [report, setReport] = useState<Report | null>(null);
+  const [report, setReport] = useState<ReportDetailType | null>(null);
 
   useEffect(() => {
-    if (!id) return;
-
-    api.get(`/reports/${id}`).then(res => {
-      setReport(res.data);
-    });
+    if (id) {
+      api.get(`/reports/${id}`).then(res => setReport(res.data));
+    }
   }, [id]);
 
-  if (!report) return <div>Loading...</div>;
+  if (!report) return <div>Загрузка...</div>;
 
   return (
     <div>
-      <h2>Report</h2>
-
-      {/* 📄 Общая инфа */}
-      <div style={{ marginBottom: 20 }}>
-        <p><b>Place:</b> {report.place}</p>
-        <p><b>Date:</b> {report.report_date}</p>
-        <p><b>Responsible:</b> {report.responsible_name}</p>
+      <h2>Детали отчета</h2>
+      <div style={styles.info}>
+        <p><strong>Место:</strong> {report.place}</p>
+        <p><strong>Дата:</strong> {new Date(report.report_date).toLocaleDateString('ru-RU')}</p>
+        <p><strong>Ответственный:</strong> {report.responsible_name}</p>
       </div>
-
-      <hr />
-
-      {/* 📋 Ответы */}
-      {report.answers.map((a, i) => (
-        <div
-          key={i}
-          style={{
-            marginBottom: 20,
-            padding: 15,
-            background: "white",
-            borderRadius: 8,
-          }}
-        >
+      {report.answers.map((a, idx) => (
+        <div key={idx} style={styles.answerCard}>
           <b>{a.question_text}</b>
-
           <p>{a.answer_text}</p>
-
-          {a.image_url && (
-            <img
-              src={a.image_url}
-              alt="answer"
-              style={{ maxWidth: 300, marginTop: 10 }}
-            />
-          )}
+          {a.image_url && <img src={a.image_url} style={styles.image} />}
         </div>
       ))}
     </div>
   );
-}
+};
+
+const styles = {
+  info: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 24 },
+  answerCard: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 16 },
+  image: { maxWidth: 300, marginTop: 8 },
+};

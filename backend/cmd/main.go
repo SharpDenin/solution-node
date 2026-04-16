@@ -119,9 +119,7 @@ func main() {
 	// ===== QUESTIONS =====
 	router.Handle("/questions",
 		middleware.AuthMiddleware(jwtManager)(
-			middleware.RequireRole("admin")(
-				http.HandlerFunc(questionHandler.GetAll),
-			),
+			http.HandlerFunc(questionHandler.GetAll),
 		),
 	).Methods("GET")
 

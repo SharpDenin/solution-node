@@ -1,141 +1,152 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../api/client';
+import type { Question, AnswerPayload } from '../types';
+import { decodeToken } from '../utils/token';
 
-type Question = {
-  id: string;
-  text: string;
-};
-
-type Answer = {
-  question_id: string;
-  text: string;
-  image_url?: string;
-};
-
-export default function CreateReport() {
+export const CreateReport = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
-
-  const [place, setPlace] = useState("");
-  const [date, setDate] = useState("");
-  const [responsible, setResponsible] = useState("");
-
-  const isValid =
-    place.trim() !== "" &&
-    date.trim() !== "" &&
-    Object.values(answers).length > 0;
+  const [answers, setAnswers] = useState<Record<string, AnswerPayload>>({});
+  const [place, setPlace] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [responsible, setResponsible] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    api.get("/questions").then(res => {
-      setQuestions(res.data);
-    });
+    // Загружаем только активные вопросы
+    api.get('/questions')
+      .then(res => {
+        const active = res.data.filter((q: Question) => q.is_active === true);
+        const sorted = active.sort((a: Question, b: Question) => a.order_index - b.order_index);
+        setQuestions(sorted);
+      })
+      .catch(err => console.error('Ошибка загрузки вопросов', err));
+
+    // Попытка получить ФИО пользователя (если есть)
+    const payload = decodeToken();
+    if (payload) {
+      // Если в токене нет full_name, оставляем поле пустым
+      setResponsible('');
+    }
   }, []);
 
-  const updateAnswer = (qId: string, value: Partial<Answer>) => {
+  const updateAnswer = (qId: string, answer_text: string) => {
     setAnswers(prev => ({
       ...prev,
-      [qId]: {
-        ...prev[qId],
-        question_id: qId,
-        text: prev[qId]?.text || "",
-        ...value,
-      },
+      [qId]: { ...prev[qId], question_id: qId, answer_text },
     }));
   };
 
   const uploadImage = async (qId: string, file: File) => {
     const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await api.post("/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    updateAnswer(qId, { image_url: res.data.url });
+    formData.append('file', file);
+    try {
+      const res = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAnswers(prev => ({
+        ...prev,
+        [qId]: {
+          ...prev[qId],
+          question_id: qId,
+          answer_text: prev[qId]?.answer_text || '',
+          image_url: res.data.url,
+        },
+      }));
+    } catch (err) {
+      console.error('Ошибка загрузки изображения', err);
+      alert('Не удалось загрузить изображение');
+    }
   };
 
-  const submit = async () => {
-    if (!isValid) {
-      alert("Fill required fields");
+  const handleSubmit = async () => {
+    if (!place || !date || Object.keys(answers).length === 0) {
+      alert('Пожалуйста, заполните место, дату и ответьте хотя бы на один вопрос');
       return;
     }
-
-    const payload = {
-      place,
-      report_date: date,
-      responsible_name: responsible,
-      answers: Object.values(answers),
-    };
-
-    await api.post("/reports", payload);
-
-    alert("Report submitted!");
+    setLoading(true);
+    try {
+      const payload = {
+        place,
+        report_date: date,
+        responsible_name: responsible || 'Не указан',
+        answers: Object.values(answers).map(a => ({
+          question_id: a.question_id,
+          answer_text: a.answer_text,
+          image_url: a.image_url,
+        })),
+      };
+      await api.post('/reports', payload);
+      navigate('/thank-you');
+    } catch (err) {
+      console.error('Ошибка отправки отчёта', err);
+      alert('Ошибка при отправке отчёта');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto" }}>
-      <h2>New Report</h2>
-
-      <div style={{ marginBottom: 20 }}>
-        <input placeholder="Place" value={place} onChange={e => setPlace(e.target.value)} />
-        <br /><br />
-
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <br /><br />
-
+    <div>
+      <h2>Новый отчёт</h2>
+      <div style={styles.formGroup}>
+        <label>Место работ *</label>
         <input
-          placeholder="Responsible name"
+          placeholder="Например: Растворный узел №1"
+          value={place}
+          onChange={e => setPlace(e.target.value)}
+          style={styles.input}
+        />
+        <label>Дата *</label>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          style={styles.input}
+        />
+        <label>Ответственный</label>
+        <input
+          placeholder="ФИО ответственного"
           value={responsible}
           onChange={e => setResponsible(e.target.value)}
+          style={styles.input}
         />
       </div>
 
       <hr />
 
       {questions.map(q => (
-        <div
-          key={q.id}
-          style={{
-            marginBottom: 20,
-            padding: 15,
-            background: "#fff",
-            borderRadius: 10,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          }}
-        >
+        <div key={q.id} style={styles.questionCard}>
           <b>{q.text}</b>
-
-          <br /><br />
-
           <textarea
-            placeholder="Answer"
-            onChange={e => updateAnswer(q.id, { text: e.target.value })}
+            placeholder="Ваш ответ"
+            onChange={e => updateAnswer(q.id, e.target.value)}
+            style={styles.textarea}
+            rows={3}
           />
-
-          <br /><br />
-
-          <input
-            type="file"
-            onChange={e => {
-              const file = e.target.files?.[0];
-              if (file) uploadImage(q.id, file);
-            }}
-          />
-
+          <input type="file" accept="image/*" onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) uploadImage(q.id, file);
+          }} />
           {answers[q.id]?.image_url && (
-            <div>
-              <img
-                src={answers[q.id].image_url}
-                style={{ maxWidth: 200, marginTop: 10 }}
-              />
-            </div>
+            <img src={answers[q.id].image_url} style={styles.image} alt="загруженное фото" />
           )}
         </div>
       ))}
 
-      <button disabled={!isValid} onClick={submit}>
-        Close shift
+      <button onClick={handleSubmit} disabled={loading} style={styles.submitBtn}>
+        {loading ? 'Отправка...' : 'Завершить смену'}
       </button>
     </div>
   );
-}
+};
+
+const styles = {
+  formGroup: { marginBottom: 24 },
+  input: { width: '100%', padding: '10px', marginBottom: 12, borderRadius: 8, border: '1px solid #ccc' },
+  questionCard: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 16 },
+  textarea: { width: '100%', marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid #ccc' },
+  image: { maxWidth: 200, marginTop: 8, display: 'block' },
+  submitBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '12px', borderRadius: 8, cursor: 'pointer', width: '100%' },
+};

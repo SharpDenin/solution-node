@@ -73,3 +73,7 @@ func (s *ReportService) GetReports(ctx context.Context, filters repository.Repor
 func (s *ReportService) GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error) {
 	return s.reportRepo.GetReportByID(ctx, id)
 }
+
+func (s *ReportService) ExportReports(ctx context.Context, filters repository.ReportFilters) ([]dtos.ReportDetailResponse, error) {
+	return s.reportRepo.GetReportsDetailed(ctx, filters)
+}

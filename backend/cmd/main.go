@@ -2,7 +2,9 @@ package main
 
 import (
 	"backend/internal/middleware"
+	"backend/internal/service/question_service"
 	"backend/internal/service/report_service"
+	"backend/internal/storage"
 	"log"
 	"net/http"
 
@@ -26,6 +28,10 @@ func main() {
 	reportService := report_service.NewReportService(db, reportRepo)
 	reportHandler := handler.NewReportHandler(reportService)
 
+	questionRepo := repository.NewQuestionRepository(db)
+	questionService := question_service.NewQuestionService(questionRepo)
+	questionHandler := handler.NewQuestionHandler(questionService)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/register", authHandler.Register)
@@ -37,6 +43,19 @@ func main() {
 
 		w.Write([]byte("Hello user " + userID.(string) + " role: " + role.(string)))
 	})
+
+	fs := http.FileServer(http.Dir(cfg.UploadDir))
+	mux.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
+
+	fileStorage := storage.NewFileStorage(cfg.UploadDir, cfg.BaseURL)
+
+	uploadHandler := handler.NewUploadHandler(fileStorage)
+
+	mux.Handle("/upload",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(uploadHandler.UploadImage),
+		),
+	)
 
 	mux.Handle("/me",
 		middleware.AuthMiddleware(jwtManager)(
@@ -72,6 +91,38 @@ func main() {
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(reportHandler.GetReportByID),
+			),
+		),
+	)
+
+	mux.Handle("/get-questions",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.GetAll),
+			),
+		),
+	)
+
+	mux.Handle("/create-questions",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.Create),
+			),
+		),
+	)
+
+	mux.Handle("/update-questions/",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.Update),
+			),
+		),
+	)
+
+	mux.Handle("/delete-questions/",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.Delete),
 			),
 		),
 	)

@@ -15,6 +15,9 @@ type Config struct {
 	DBName     string
 
 	ServerPort string
+
+	UploadDir string
+	BaseURL   string
 }
 
 func LoadConfig() *Config {
@@ -30,6 +33,8 @@ func LoadConfig() *Config {
 		DBPassword: getEnv("DB_PASSWORD", "postgres"),
 		DBName:     getEnv("DB_NAME", "report_db"),
 		ServerPort: getEnv("SERVER_PORT", "8080"),
+		UploadDir:  getEnv("UPLOAD_DIR", "./uploads"),
+		BaseURL:    getEnv("BASE_URL", "http://localhost:8090"),
 	}
 }
 

@@ -53,7 +53,8 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 
 		var imageURL *string
 		if ans.ImageURL != "" {
-			imageURL = &ans.ImageURL
+			v := ans.ImageURL
+			imageURL = &v
 		}
 
 		err = s.reportRepo.CreateAnswer(ctx, tx, reportID, qID, ans.AnswerText, imageURL)

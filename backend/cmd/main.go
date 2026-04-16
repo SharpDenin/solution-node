@@ -54,9 +54,17 @@ func main() {
 		),
 	)
 
-	mux.Handle("/reports",
+	mux.Handle("/create-report",
 		middleware.AuthMiddleware(jwtManager)(
 			http.HandlerFunc(reportHandler.CreateReport),
+		),
+	)
+
+	mux.Handle("/get-report-list",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(reportHandler.GetReports),
+			),
 		),
 	)
 

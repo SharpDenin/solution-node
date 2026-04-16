@@ -63,3 +63,7 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 
 	return tx.Commit(ctx)
 }
+
+func (s *ReportService) GetReports(ctx context.Context, filters repository.ReportFilters) ([]dtos.ReportResponse, error) {
+	return s.reportRepo.GetReports(ctx, filters)
+}

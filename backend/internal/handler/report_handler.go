@@ -3,8 +3,10 @@ package handler
 import (
 	"backend/internal/middleware"
 	"backend/internal/models/dtos"
+	"backend/internal/repository"
 	"backend/internal/service/report_service"
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -33,4 +35,46 @@ func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
+
+	query := r.URL.Query()
+
+	filters := repository.ReportFilters{
+		Limit:  10,
+		Offset: 0,
+	}
+
+	if v := query.Get("date_from"); v != "" {
+		filters.DateFrom = &v
+	}
+
+	if v := query.Get("date_to"); v != "" {
+		filters.DateTo = &v
+	}
+
+	if v := query.Get("place"); v != "" {
+		filters.Place = &v
+	}
+
+	if v := query.Get("user_id"); v != "" {
+		filters.UserID = &v
+	}
+
+	if v := query.Get("limit"); v != "" {
+		fmt.Sscanf(v, "%d", &filters.Limit)
+	}
+
+	if v := query.Get("offset"); v != "" {
+		fmt.Sscanf(v, "%d", &filters.Offset)
+	}
+
+	reports, err := h.reportService.GetReports(r.Context(), filters)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(reports)
 }

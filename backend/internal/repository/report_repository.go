@@ -3,7 +3,10 @@ package repository
 import (
 	"backend/internal/models/dtos"
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -20,6 +23,7 @@ type ReportRepository interface {
 	CreateReport(ctx context.Context, tx Tx, userID uuid.UUID, place string, reportDate string, responsibleName string) (uuid.UUID, error)
 	CreateAnswer(ctx context.Context, tx Tx, reportID uuid.UUID, questionID uuid.UUID, answerText string, imageURL *string) error
 	GetReports(ctx context.Context, filters ReportFilters) ([]dtos.ReportResponse, error)
+	GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error)
 }
 
 type reportRepository struct {
@@ -149,4 +153,97 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 	}
 
 	return reports, nil
+}
+
+func (r *reportRepository) GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error) {
+
+	query := `
+		SELECT 
+			r.id,
+			r.user_id,
+			r.place,
+			r.report_date,
+			r.responsible_name,
+			r.created_at,
+			q.id,
+			q.text,
+			a.answer_text,
+			a.image_url
+		FROM reports r
+		LEFT JOIN answers a ON a.report_id = r.id
+		LEFT JOIN questions q ON q.id = a.question_id
+		WHERE r.id = $1
+		ORDER BY q.order_index
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var report *dtos.ReportDetailResponse
+
+	for rows.Next() {
+		var (
+			rID, userID, place, responsible string
+			reportDate, createdAt           time.Time
+
+			qID, qText *string
+			answerText *string
+			imageURL   *string
+		)
+
+		err := rows.Scan(
+			&rID,
+			&userID,
+			&place,
+			&reportDate,
+			&responsible,
+			&createdAt,
+			&qID,
+			&qText,
+			&answerText,
+			&imageURL,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// создаём report один раз
+		if report == nil {
+			report = &dtos.ReportDetailResponse{
+				ID:              rID,
+				UserID:          userID,
+				Place:           place,
+				ReportDate:      reportDate,
+				ResponsibleName: responsible,
+				CreatedAt:       createdAt,
+				Answers:         []dtos.AnswerResponse{},
+			}
+		}
+
+		// если есть ответы
+		if qID != nil {
+			report.Answers = append(report.Answers, dtos.AnswerResponse{
+				QuestionID:   *qID,
+				QuestionText: *qText,
+				AnswerText:   derefString(answerText),
+				ImageURL:     imageURL,
+			})
+		}
+	}
+
+	if report == nil {
+		return nil, errors.New("report not found")
+	}
+
+	return report, nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

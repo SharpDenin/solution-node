@@ -5,6 +5,7 @@ import (
 	"backend/internal/repository"
 	"context"
 	"errors"
+
 	"github.com/google/uuid"
 )
 
@@ -66,4 +67,8 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 
 func (s *ReportService) GetReports(ctx context.Context, filters repository.ReportFilters) ([]dtos.ReportResponse, error) {
 	return s.reportRepo.GetReports(ctx, filters)
+}
+
+func (s *ReportService) GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error) {
+	return s.reportRepo.GetReportByID(ctx, id)
 }

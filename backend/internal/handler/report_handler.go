@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type ReportHandler struct {
@@ -77,4 +78,17 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(reports)
+}
+
+func (h *ReportHandler) GetReportByID(w http.ResponseWriter, r *http.Request) {
+
+	id := strings.TrimPrefix(r.URL.Path, "/reports/")
+
+	report, err := h.reportService.GetReportByID(r.Context(), id)
+	if err != nil {
+		http.Error(w, "report not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(report)
 }

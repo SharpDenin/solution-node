@@ -68,6 +68,14 @@ func main() {
 		),
 	)
 
+	mux.Handle("/reports/",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(reportHandler.GetReportByID),
+			),
+		),
+	)
+
 	log.Println("Server running on :" + cfg.ServerPort)
 	http.ListenAndServe(":"+cfg.ServerPort, mux)
 }

@@ -21,5 +21,5 @@ type ReportResponse struct {
 	Place           string    `json:"place"`
 	ReportDate      time.Time `json:"report_date"`
 	ResponsibleName string    `json:"responsible_name"`
-	CreatedAt       string    `json:"created_at"`
+	CreatedAt       time.Time `json:"created_at"`
 }

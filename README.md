@@ -19,7 +19,7 @@ DB_NAME=report_db
 
 SERVER_PORT=8080
 
-JWT_SECRET=0387088c2e909e63439319064ad8cc0641d81d63d9fcc662c8cfb6d71099812c
+JWT_SECRET=0387088c2e979e63459319164ad9cc0651d81d63d9fcc662c8cfb6d71099812c // Обязательно замените на свой! (Можно с сайта https://jwtsecrets.com/)
 
 UPLOAD_DIR=./uploads
 BASE_URL=http://localhost:8090
@@ -30,4 +30,15 @@ CORS_ALLOW_CREDENTIALS=true
 
 ## 2. Открываем терминал в корне проекта
 ## 3. Вводим команду ```docker-compose up --build```
+## 4.Если докер не установлен:
 
+a. Установите Docker и Docker Compose:
+
+b. Windows / macOS: Docker Desktop
+
+c. Linux: sudo apt install docker.io docker-compose (или через официальный репозиторий)
+
+d. После установки повторите шаг 3.
+## 5. Переход к фронту по ссылке:
+http://адрес_хоста:3010
+## 5. Креды авторизации под админом (Логин: admin, Пароль: snAdmin01)

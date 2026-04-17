@@ -15,6 +15,7 @@ type ReportFilters struct {
 	DateTo   *string
 	Place    *string
 	UserID   *string
+	UserName *string
 	Limit    int
 	Offset   int
 }
@@ -87,44 +88,50 @@ func (r *reportRepository) CreateAnswer(
 
 func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]dtos.ReportResponse, error) {
 	query := `
-		SELECT id, user_id, place, report_date, responsible_name, created_at
-		FROM reports
-		WHERE 1=1
-	`
+        SELECT r.id, r.user_id, r.place, r.report_date, r.responsible_name, r.created_at
+        FROM reports r
+        LEFT JOIN users u ON u.id = r.user_id
+        WHERE 1=1
+    `
 
 	args := []interface{}{}
 	argID := 1
 
 	if f.DateFrom != nil {
-		query += " AND report_date >= $" + fmt.Sprint(argID)
+		query += " AND r.report_date >= $" + fmt.Sprint(argID)
 		args = append(args, *f.DateFrom)
 		argID++
 	}
 
 	if f.DateTo != nil {
-		query += " AND report_date <= $" + fmt.Sprint(argID)
+		query += " AND r.report_date <= $" + fmt.Sprint(argID)
 		args = append(args, *f.DateTo)
 		argID++
 	}
 
 	if f.Place != nil {
-		query += " AND place ILIKE $" + fmt.Sprint(argID)
+		query += " AND r.place ILIKE $" + fmt.Sprint(argID)
 		args = append(args, "%"+*f.Place+"%")
 		argID++
 	}
 
 	if f.UserID != nil {
-		query += " AND user_id = $" + fmt.Sprint(argID)
+		query += " AND r.user_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.UserID)
 		argID++
 	}
 
-	query += " ORDER BY report_date DESC"
+	// НОВЫЙ ФИЛЬТР ПО ИМЕНИ ПОЛЬЗОВАТЕЛЯ
+	if f.UserName != nil {
+		query += " AND u.full_name ILIKE $" + fmt.Sprint(argID)
+		args = append(args, "%"+*f.UserName+"%")
+		argID++
+	}
 
+	query += " ORDER BY r.report_date DESC"
 	query += " LIMIT $" + fmt.Sprint(argID)
 	args = append(args, f.Limit)
 	argID++
-
 	query += " OFFSET $" + fmt.Sprint(argID)
 	args = append(args, f.Offset)
 
@@ -135,25 +142,14 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 	defer rows.Close()
 
 	var reports []dtos.ReportResponse
-
 	for rows.Next() {
 		var r dtos.ReportResponse
-
-		err := rows.Scan(
-			&r.ID,
-			&r.UserID,
-			&r.Place,
-			&r.ReportDate,
-			&r.ResponsibleName,
-			&r.CreatedAt,
-		)
+		err := rows.Scan(&r.ID, &r.UserID, &r.Place, &r.ReportDate, &r.ResponsibleName, &r.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
-
 		reports = append(reports, r)
 	}
-
 	return reports, nil
 }
 
@@ -260,6 +256,7 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 		FROM reports r
 		LEFT JOIN answers a ON a.report_id = r.id
 		LEFT JOIN questions q ON q.id = a.question_id
+		LEFT JOIN users u ON u.id = r.user_id
 		WHERE 1=1
 	`
 
@@ -290,6 +287,12 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 		argID++
 	}
 
+	if f.UserName != nil {
+		query += " AND u.full_name ILIKE $" + fmt.Sprint(argID)
+		args = append(args, "%"+*f.UserName+"%")
+		argID++
+	}
+
 	query += " ORDER BY r.created_at DESC"
 
 	rows, err := r.db.Pool.Query(ctx, query, args...)
@@ -299,7 +302,7 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 	defer rows.Close()
 
 	reportMap := make(map[string]*dtos.ReportDetailResponse)
-	result := make([]dtos.ReportDetailResponse, 0)
+	var result []dtos.ReportDetailResponse
 
 	for rows.Next() {
 
@@ -339,7 +342,6 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 				CreatedAt:       createdAt,
 				Answers:         []dtos.AnswerResponse{},
 			}
-			result = append(result, *reportMap[rID])
 		}
 
 		// добавляем ответы
@@ -351,6 +353,10 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 				ImageURL:     imageURL,
 			})
 		}
+	}
+
+	for _, rep := range reportMap {
+		result = append(result, *rep)
 	}
 
 	return result, nil

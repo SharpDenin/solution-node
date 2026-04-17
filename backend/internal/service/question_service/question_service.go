@@ -50,15 +50,9 @@ func (s *QuestionService) GetAll(ctx context.Context) ([]responses.QuestionRespo
 	return res, nil
 }
 
-func (s *QuestionService) Update(ctx context.Context, req requests.UpdateQuestionRequest) error {
-
-	parsedID, err := uuid.Parse(req.ID)
-	if err != nil {
-		return err
-	}
-
+func (s *QuestionService) Update(ctx context.Context, id uuid.UUID, req requests.UpdateQuestionRequest) error {
 	q := &models.Question{
-		ID:         parsedID,
+		ID:         id,
 		Text:       req.Text,
 		OrderIndex: req.OrderIndex,
 		IsActive:   req.IsActive,

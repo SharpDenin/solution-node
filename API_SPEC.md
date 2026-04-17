@@ -108,7 +108,7 @@
   "answers": [
     {
       "question_id": "uuid",
-      "text": "All good",
+      "answer_text": "All good",
       "image_url": "http://..."
     }
   ]

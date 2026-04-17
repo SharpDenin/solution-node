@@ -16,7 +16,7 @@ export const Dashboard = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [filters, setFilters] = useState<ReportFilters>(() => {
     const { start, end } = getCurrentYearRange();
-    return { date_from: start, date_to: end, place: '', user_id: '' };
+    return { date_from: start, date_to: end, place: '', user_name: '' };
   });
   const [loading, setLoading] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -29,10 +29,9 @@ export const Dashboard = () => {
       if (filters.date_from) params.date_from = filters.date_from;
       if (filters.date_to) params.date_to = filters.date_to;
       if (filters.place) params.place = filters.place;
-      if (filters.user_id) params.user_id = filters.user_id;
+      if (filters.user_name) params.user_name = filters.user_name;
 
       const res = await api.get('/reports', { params });
-      // Гарантируем, что reports всегда массив
       setReports(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ошибка загрузки отчётов', err);
@@ -52,7 +51,7 @@ export const Dashboard = () => {
 
   const resetFilters = () => {
     const { start, end } = getCurrentYearRange();
-    setFilters({ date_from: start, date_to: end, place: '', user_id: '' });
+    setFilters({ date_from: start, date_to: end, place: '', user_name: '' });
   };
 
   return (
@@ -85,6 +84,14 @@ export const Dashboard = () => {
           placeholder="Название места"
           value={filters.place || ''}
           onChange={(e) => handleFilterChange('place', e.target.value)}
+          style={styles.filterInput}
+        />
+        <label>Ответственный:</label>
+        <input
+          type="text"
+          placeholder="ФИО ответственного"
+          value={filters.user_name || ''}
+          onChange={(e) => handleFilterChange('user_name', e.target.value)}
           style={styles.filterInput}
         />
         <button onClick={resetFilters} style={styles.resetBtn}>Сбросить</button>

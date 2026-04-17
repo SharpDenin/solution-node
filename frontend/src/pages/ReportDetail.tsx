@@ -27,7 +27,7 @@ export const ReportDetail = () => {
         <div key={idx} style={styles.answerCard}>
           <b>{a.question_text}</b>
           <p>{a.answer_text}</p>
-          {a.image_url && <img src={a.image_url} style={styles.image} />}
+          {a.image_url && <img src={a.image_url} style={styles.image} alt="фото" />}
         </div>
       ))}
     </div>
@@ -37,5 +37,11 @@ export const ReportDetail = () => {
 const styles = {
   info: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 24 },
   answerCard: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 16 },
-  image: { maxWidth: 300, marginTop: 8 },
+  image: { 
+    maxWidth: '100%',   // теперь изображение занимает всю ширину контейнера
+    maxHeight: 500,     // ограничиваем высоту для удобства просмотра
+    marginTop: 8,
+    borderRadius: 8,
+    objectFit: 'contain' as const,
+  },
 };

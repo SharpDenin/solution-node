@@ -4,6 +4,7 @@ import (
 	"backend/internal/handler/dtos/requests"
 	"backend/internal/service/question_service"
 	"encoding/json"
+	"github.com/google/uuid"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -45,14 +46,22 @@ func (h *QuestionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QuestionHandler) Update(w http.ResponseWriter, r *http.Request) {
-	var req requests.UpdateQuestionRequest
 
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid question id", 400)
+		return
+	}
+
+	var req requests.UpdateQuestionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid body", 400)
 		return
 	}
 
-	err := h.service.Update(r.Context(), req)
+	err = h.service.Update(r.Context(), id, req)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

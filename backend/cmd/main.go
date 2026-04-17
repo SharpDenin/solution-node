@@ -100,18 +100,18 @@ func main() {
 		),
 	).Methods("POST")
 
-	router.Handle("/reports/{id}",
-		middleware.AuthMiddleware(jwtManager)(
-			middleware.RequireRole("admin")(
-				http.HandlerFunc(reportHandler.GetReportByID),
-			),
-		),
-	).Methods("GET")
-
 	router.Handle("/reports/export",
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(reportHandler.ExportExcel),
+			),
+		),
+	).Methods("GET")
+
+	router.Handle("/reports/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(reportHandler.GetReportByID),
 			),
 		),
 	).Methods("GET")

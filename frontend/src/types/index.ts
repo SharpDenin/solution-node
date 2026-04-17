@@ -42,7 +42,5 @@ export interface ReportFilters {
   date_from?: string;
   date_to?: string;
   place?: string;
-  user_id?: string;
-  limit?: number;
-  offset?: number;
+  user_name?: string;
 }

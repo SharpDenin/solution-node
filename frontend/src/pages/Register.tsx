@@ -15,7 +15,7 @@ export const Register = () => {
     setError('');
     setSuccess(false);
     try {
-      await api.post('/register', {
+      await api.post('/api/register', {
         full_name: fullName,
         login,
         password,

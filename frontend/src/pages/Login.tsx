@@ -15,7 +15,7 @@ export const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await api.post('/login', { login, password });
+      const res = await api.post('/api/login', { login, password });
       const token = res.data.token;
       authLogin(token);
       // Декодируем роль прямо сейчас, не дожидаясь обновления контекста

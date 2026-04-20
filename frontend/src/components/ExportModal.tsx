@@ -20,7 +20,7 @@ export const ExportModal: React.FC<Props> = ({ onClose, initialFilters }) => {
       if (filters.place) params.append('place', filters.place);
       if (filters.user_name) params.append('user_name', filters.user_name); // новое поле
       
-      const response = await api.get('/reports/export', {
+      const response = await api.get('/api/reports/export', {
         params,
         responseType: 'blob',
       });

@@ -14,7 +14,7 @@ export const Questions = () => {
   const loadQuestions = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/questions');
+      const res = await api.get('/api/questions');
       // Показываем только активные вопросы (is_active === true)
       const activeQuestions = res.data.filter((q: Question) => q.is_active === true);
       const sorted = activeQuestions.sort((a: Question, b: Question) => a.order_index - b.order_index);
@@ -33,7 +33,7 @@ export const Questions = () => {
   const addQuestion = async () => {
     if (!newText.trim()) return;
     try {
-      await api.post('/questions', { text: newText, order_index: newOrder });
+      await api.post('/api/questions', { text: newText, order_index: newOrder });
       setNewText('');
       setNewOrder(questions.length + 1);
       loadQuestions();
@@ -45,7 +45,7 @@ export const Questions = () => {
 
   const updateQuestion = async (id: string) => {
     try {
-      await api.put(`/questions/${id}`, { text: editText, order_index: editOrder, is_active: true });
+      await api.put(`/api/questions/${id}`, { text: editText, order_index: editOrder, is_active: true });
       setEditingId(null);
       loadQuestions();
     } catch (err) {
@@ -57,7 +57,7 @@ export const Questions = () => {
   const deleteQuestion = async (id: string) => {
     if (!window.confirm('Удалить вопрос?')) return;
     try {
-      await api.delete(`/questions/${id}`);
+      await api.delete(`/api/questions/${id}`);
       loadQuestions();
     } catch (err) {
       console.error('Ошибка удаления вопроса', err);

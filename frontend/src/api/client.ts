@@ -2,7 +2,6 @@ import axios from 'axios';
 import { getToken } from '../utils/token';
 
 export const api = axios.create({
-  baseURL: 'http://localhost:8090',
   headers: { 'Content-Type': 'application/json' },
 });
 

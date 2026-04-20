@@ -31,7 +31,7 @@ export const Dashboard = () => {
       if (filters.place) params.place = filters.place;
       if (filters.user_name) params.user_name = filters.user_name;
 
-      const res = await api.get('/reports', { params });
+      const res = await api.get('/api/reports', { params });
       setReports(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Ошибка загрузки отчётов', err);

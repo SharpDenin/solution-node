@@ -9,7 +9,7 @@ export const ReportDetail = () => {
 
   useEffect(() => {
     if (id) {
-      api.get(`/reports/${id}`).then(res => setReport(res.data));
+      api.get(`/api/reports/${id}`).then(res => setReport(res.data));
     }
   }, [id]);
 

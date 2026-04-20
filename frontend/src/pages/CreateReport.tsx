@@ -13,7 +13,7 @@ export const CreateReport = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/questions')
+    api.get('/api/questions')
       .then(res => {
         const active = res.data.filter((q: Question) => q.is_active === true);
         const sorted = active.sort((a: Question, b: Question) => a.order_index - b.order_index);
@@ -37,7 +37,7 @@ export const CreateReport = () => {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/upload', formData, {
+      const res = await api.post('/api/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setAnswers(prev => ({
@@ -82,7 +82,7 @@ export const CreateReport = () => {
         })),
       };
       console.log('Отправляемые данные:', payload);
-      await api.post('/reports', payload);
+      await api.post('/api/reports', payload);
       navigate('/thank-you');
     } catch (err: any) {
       console.error('Ошибка:', err);

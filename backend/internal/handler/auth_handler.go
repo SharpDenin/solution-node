@@ -19,11 +19,22 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req requests.RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	err := h.authService.Register(r.Context(), req.FullName, req.Login, req.Password)
+	if req.FullName == "" || req.Login == "" || req.Password == "" || req.Role == "" {
+		http.Error(w, "missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	err := h.authService.Register(
+		r.Context(),
+		req.FullName,
+		req.Login,
+		req.Password,
+		req.Role,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -36,7 +47,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req requests.LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Login == "" || req.Password == "" {
+		http.Error(w, "missing credentials", http.StatusBadRequest)
 		return
 	}
 

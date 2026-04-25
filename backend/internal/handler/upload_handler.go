@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type UploadHandler struct {
@@ -18,9 +20,9 @@ func NewUploadHandler(storage *storage.FileStorage) *UploadHandler {
 }
 
 func (h *UploadHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
-	err := r.ParseMultipartForm(10 << 20)
-	if err != nil {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "file too large", http.StatusBadRequest)
 		return
 	}
@@ -34,15 +36,19 @@ func (h *UploadHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 
 	ext := strings.ToLower(filepath.Ext(handler.Filename))
 	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
-		http.Error(w, "unsupported file format, only PNG, JPG, JPEG allowed", http.StatusBadRequest)
+		http.Error(w, "unsupported file format", http.StatusBadRequest)
 		return
 	}
 
-	url, err := h.storage.SaveFile(file, handler.Filename)
+	fileName := uuid.New().String() + ext
+
+	url, err := h.storage.SaveFile(file, fileName)
 	if err != nil {
 		http.Error(w, "save error", http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
 
 	json.NewEncoder(w).Encode(responses.UploadResponse{
 		URL: url,

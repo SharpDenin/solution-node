@@ -1,8 +1,6 @@
 package middleware
 
-import (
-	"net/http"
-)
+import "net/http"
 
 type CORSConfig struct {
 	AllowedOrigins   map[string]bool
@@ -12,28 +10,9 @@ type CORSConfig struct {
 func CORS(config CORSConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 			origin := r.Header.Get("Origin")
 
-			if r.Method == http.MethodOptions {
-				if config.AllowedOrigins[origin] {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-					if config.AllowCredentials {
-						w.Header().Set("Access-Control-Allow-Credentials", "true")
-					}
-
-					w.WriteHeader(http.StatusNoContent)
-					return
-				}
-
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-
-			if config.AllowedOrigins[origin] {
+			if origin != "" && config.AllowedOrigins[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
 
@@ -44,6 +23,16 @@ func CORS(config CORSConfig) func(http.Handler) http.Handler {
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			if r.Method == http.MethodOptions {
+				if origin != "" && !config.AllowedOrigins[origin] {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 
 			next.ServeHTTP(w, r)
 		})

@@ -11,13 +11,14 @@ import (
 )
 
 type ReportFilters struct {
-	DateFrom    *string
-	DateTo      *string
-	ChecklistID *string
-	UserID      *string
-	UserName    *string
-	Limit       int
-	Offset      int
+	DateFrom        *string
+	DateTo          *string
+	ChecklistID     *string
+	UserID          *string
+	UserName        *string
+	MetadataFilters map[string]string
+	Limit           int
+	Offset          int
 }
 
 type ReportRepository interface {
@@ -332,6 +333,12 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 		argID++
 	}
 
+	for key, value := range f.MetadataFilters {
+		query += fmt.Sprintf(" AND r.metadata->>$%d ILIKE $%d", argID, argID+1)
+		args = append(args, key, "%"+value+"%")
+		argID += 2
+	}
+
 	query += " ORDER BY r.created_at DESC, q.order_index ASC"
 
 	rows, err := r.db.Pool.Query(ctx, query, args...)
@@ -341,7 +348,6 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 	defer rows.Close()
 
 	reportMap := make(map[string]*dtos.ReportDetailResponse)
-	result := make([]dtos.ReportDetailResponse, 0)
 
 	for rows.Next() {
 		var (
@@ -395,7 +401,6 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 			}
 
 			reportMap[reportID] = report
-			result = append(result, *report)
 		}
 
 		if questionID != nil {
@@ -413,7 +418,7 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 		return nil, err
 	}
 
-	result = make([]dtos.ReportDetailResponse, 0, len(reportMap))
+	result := make([]dtos.ReportDetailResponse, 0, len(reportMap))
 	for _, report := range reportMap {
 		result = append(result, *report)
 	}

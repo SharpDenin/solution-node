@@ -1,26 +1,55 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import type { Question, AnswerPayload } from '../types';
+import type { Question, AnswerPayload, Checklist } from '../types';
 
-export const CreateReport = () => {
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<string, AnswerPayload>>({});
-  const [place, setPlace] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [responsible, setResponsible] = useState('');
-  const [loading, setLoading] = useState(false);
+export const ChecklistReport = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [answers, setAnswers] = useState<Record<string, AnswerPayload>>({});
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [responsible, setResponsible] = useState('');
+  const [place, setPlace] = useState('');
+  const [sort, setSort] = useState('');
+  const [prioritySort, setPrioritySort] = useState('low');
+  const [loading, setLoading] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+
   useEffect(() => {
-    api.get('/api/questions')
+    if (!id) return;
+
+    api.get('/api/checklists/available')
       .then(res => {
-        const active = res.data.filter((q: Question) => q.is_active === true);
-        const sorted = active.sort((a: Question, b: Question) => a.order_index - b.order_index);
+        const accessibleIds = (res.data as Checklist[]).map(c => c.id);
+        if (!accessibleIds.includes(id)) {
+          alert('У вас нет доступа к этому чек-листу');
+          navigate('/');
+          return;
+        }
+        // Загружаем инфо о чек-листе и вопросы
+        return Promise.all([
+          api.get(`/api/checklists/${id}`),
+          api.get(`/api/checklists/${id}/questions`)
+        ]);
+      })
+      .then((results) => {
+        if (!results) return;
+        const [clRes, qRes] = results;
+        setChecklist(clRes.data);
+        const sorted = (qRes.data as Question[])
+          .filter(q => q.is_active)
+          .sort((a, b) => a.order_index - b.order_index);
         setQuestions(sorted);
       })
-      .catch(err => console.error('Ошибка загрузки вопросов', err));
-  }, []);
+      .catch(err => {
+        console.error(err);
+        navigate('/');
+      })
+      .finally(() => setCheckingAccess(false));
+  }, [id, navigate]);
 
   const updateAnswer = (qId: string, answer_text: string) => {
     setAnswers(prev => ({
@@ -49,7 +78,7 @@ export const CreateReport = () => {
           answer_text: prev[qId]?.answer_text || '',
         },
       }));
-    } catch (err) {
+    } catch {
       alert('Ошибка загрузки изображения');
     }
   };
@@ -65,45 +94,46 @@ export const CreateReport = () => {
   };
 
   const handleSubmit = async () => {
-    if (!place || !date || Object.keys(answers).length === 0) {
-      alert('Заполните место, дату и ответьте хотя бы на один вопрос');
+    if (!date || !responsible) {
+      alert('Заполните обязательные поля (дата, ответственный)');
       return;
     }
+    const payload: any = {
+      checklist_id: id,
+      report_date: date,
+      responsible_name: responsible,
+      answers: Object.values(answers).map(a => ({
+        question_id: a.question_id,
+        answer_text: a.answer_text,
+        image_url: a.image_url || '',
+      })),
+    };
+
+    if (checklist?.code === 'sort_priority') {
+      payload.sort = sort;
+      payload.priority_sort = prioritySort;
+    } else {
+      payload.place = place || 'Не указано';
+    }
+
     setLoading(true);
     try {
-      const payload = {
-        place,
-        report_date: date,
-        responsible_name: responsible || 'Не указан',
-        answers: Object.values(answers).map(a => ({
-          question_id: a.question_id,
-          answer_text: a.answer_text,
-          image_url: a.image_url || '',
-        })),
-      };
-      console.log('Отправляемые данные:', payload);
       await api.post('/api/reports', payload);
       navigate('/thank-you');
-    } catch (err: any) {
-      console.error('Ошибка:', err);
-      const message = err.response?.data || 'Ошибка при отправке отчёта';
-      alert(message);
+    } catch {
+      alert('Ошибка отправки отчёта');
     } finally {
       setLoading(false);
     }
   };
 
+  if (checkingAccess) return <div>Проверка доступа...</div>;
+  if (!checklist) return <div>Чек-лист не найден</div>;
+
   return (
     <div>
-      <h2>Новый отчёт</h2>
+      <h2>{checklist.name}</h2>
       <div style={styles.formGroup}>
-        <label>Место работ *</label>
-        <input
-          placeholder="Например: Растворный узел №1"
-          value={place}
-          onChange={e => setPlace(e.target.value)}
-          style={styles.input}
-        />
         <label>Дата *</label>
         <input
           type="date"
@@ -111,13 +141,43 @@ export const CreateReport = () => {
           onChange={e => setDate(e.target.value)}
           style={styles.input}
         />
-        <label>Ответственный</label>
+        <label>Ответственный *</label>
         <input
           placeholder="ФИО ответственного"
           value={responsible}
           onChange={e => setResponsible(e.target.value)}
           style={styles.input}
         />
+
+        {checklist.code === 'sort_priority' ? (
+          <>
+            <label>Сорт</label>
+            <input
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              style={styles.input}
+            />
+            <label>Приоритет сорта</label>
+            <select
+              value={prioritySort}
+              onChange={e => setPrioritySort(e.target.value)}
+              style={styles.input}
+            >
+              <option value="low">Низкий</option>
+              <option value="high">Высокий</option>
+            </select>
+          </>
+        ) : (
+          <>
+            <label>Место работ</label>
+            <input
+              placeholder="Например: Растворный узел №1"
+              value={place}
+              onChange={e => setPlace(e.target.value)}
+              style={styles.input}
+            />
+          </>
+        )}
       </div>
 
       <hr />
@@ -140,7 +200,7 @@ export const CreateReport = () => {
   );
 };
 
-// Типы для пропсов QuestionCard
+// ---- QuestionCard ----
 interface QuestionCardProps {
   question: Question;
   answer?: AnswerPayload;
@@ -178,11 +238,6 @@ const QuestionCard = ({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) onImageUpload(file);
-  };
-
   return (
     <div style={styles.questionCard}>
       <b>{question.text}</b>
@@ -207,7 +262,10 @@ const QuestionCard = ({
         <input
           type="file"
           accept="image/*"
-          onChange={handleFileSelect}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onImageUpload(file);
+          }}
           style={{ display: 'none' }}
           id={`file-${question.id}`}
         />
@@ -227,12 +285,12 @@ const QuestionCard = ({
   );
 };
 
-// Стили с правильными типами (используем CSSProperties)
+// ---- Стили ----
 const styles: Record<string, CSSProperties> = {
   formGroup: { marginBottom: 24 },
-  input: { width: '100%', padding: '10px', marginBottom: 12, borderRadius: 8, border: '1px solid #ccc' },
+  input: { width: '100%', padding: '10px', marginBottom: 12, borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' },
   questionCard: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 16 },
-  textarea: { width: '100%', marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid #ccc' },
+  textarea: { width: '100%', marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' },
   dropZone: {
     marginTop: 12,
     border: '2px dashed #ccc',
@@ -268,5 +326,5 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '12px', borderRadius: 8, cursor: 'pointer', width: '100%' },
+  submitBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '12px', borderRadius: 8, cursor: 'pointer', width: '100%', marginTop: 16 },
 };

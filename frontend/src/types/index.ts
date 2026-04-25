@@ -1,10 +1,10 @@
-export type UserRole = 'worker' | 'admin';
+export type UserRole = 'admin' | 'worker';
 
-export interface User {
+export interface Checklist {
   id: string;
-  fullName: string;
-  login: string;
-  role: UserRole;
+  name: string;
+  code: string;             // 'default' | 'sort_priority' ...
+  allowed_role_id: string;  // UUID роли, которой разрешён доступ
 }
 
 export interface Question {
@@ -12,6 +12,8 @@ export interface Question {
   text: string;
   order_index: number;
   is_active: boolean;
+  checklist_id: string;
+  formula?: string;
 }
 
 export interface AnswerPayload {
@@ -23,10 +25,13 @@ export interface AnswerPayload {
 export interface Report {
   id: string;
   user_id: string;
-  place: string;
+  checklist_id: string;
   report_date: string;
   responsible_name: string;
   created_at: string;
+  place?: string;
+  sort?: string;
+  priority_sort?: string;
 }
 
 export interface ReportDetail extends Report {
@@ -35,12 +40,16 @@ export interface ReportDetail extends Report {
     question_text: string;
     answer_text: string;
     image_url?: string;
+    evaluation?: 'good' | 'bad' | null;
   }>;
 }
 
 export interface ReportFilters {
   date_from?: string;
   date_to?: string;
-  place?: string;
   user_name?: string;
+  checklist_id?: string;
+  place?: string;
+  sort?: string;
+  priority_sort?: string;
 }

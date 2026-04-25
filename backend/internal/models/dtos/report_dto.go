@@ -1,25 +1,31 @@
 package dtos
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type CreateReportRequest struct {
-	Place           string            `json:"place"`
-	ReportDate      string            `json:"report_date"`
-	ResponsibleName string            `json:"responsible_name"`
-	Answers         []CreateAnswerDTO `json:"answers"`
+	ChecklistID     string                 `json:"checklist_id"`
+	ReportDate      string                 `json:"report_date"`
+	ResponsibleName string                 `json:"responsible_name"`
+	Metadata        map[string]interface{} `json:"metadata"`
+	Answers         []AnswerRequest        `json:"answers"`
 }
 
-type CreateAnswerDTO struct {
+type AnswerRequest struct {
 	QuestionID string `json:"question_id"`
 	AnswerText string `json:"answer_text"`
 	ImageURL   string `json:"image_url"`
 }
 
 type ReportResponse struct {
-	ID              string    `json:"id"`
-	UserID          string    `json:"user_id"`
-	Place           string    `json:"place"`
-	ReportDate      time.Time `json:"report_date"`
-	ResponsibleName string    `json:"responsible_name"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string          `json:"id"`
+	UserID          string          `json:"user_id"`
+	ChecklistID     string          `json:"checklist_id"`
+	Metadata        json.RawMessage `json:"metadata"`
+	Place           string          `json:"place"`
+	ReportDate      time.Time       `json:"report_date"`
+	ResponsibleName string          `json:"responsible_name"`
+	CreatedAt       time.Time       `json:"created_at"`
 }

@@ -1,9 +1,11 @@
 package auth_service
 
 import (
-	"github.com/golang-jwt/jwt/v5"
+	"errors"
 	"os"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type JWTManager struct {
@@ -51,7 +53,7 @@ func (j *JWTManager) ParseToken(tokenStr string) (*Claims, error) {
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
-		return nil, err
+		return nil, errors.New("invalid token")
 	}
 
 	return claims, nil

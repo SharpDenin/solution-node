@@ -4,6 +4,7 @@ import (
 	"backend/internal/models"
 	"context"
 	"errors"
+
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/google/uuid"
@@ -11,9 +12,9 @@ import (
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, user *models.User) error
-	GetByLogin(ctx context.Context, login string) (*models.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+	Create(ctx context.Context, user *models.User, roleName string) error
+	GetByLogin(ctx context.Context, login string) (*models.User, string, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.User, string, error)
 }
 
 type userRepository struct {
@@ -24,10 +25,10 @@ func NewUserRepository(db *DB) UserRepository {
 	return &userRepository{db: db}
 }
 
-func (r *userRepository) Create(ctx context.Context, user *models.User) error {
+func (r *userRepository) Create(ctx context.Context, user *models.User, roleName string) error {
 	query := `
-		INSERT INTO users (full_name, login, password_hash, role)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (full_name, login, password_hash, role_id)
+		VALUES ($1, $2, $3, (SELECT id FROM roles WHERE name = $4))
 		RETURNING id, created_at
 	`
 
@@ -35,7 +36,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 		user.FullName,
 		user.Login,
 		user.PasswordHash,
-		user.Role,
+		roleName,
 	).Scan(&user.ID, &user.CreatedAt)
 
 	if err != nil {
@@ -50,58 +51,78 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 	return nil
 }
 
-func (r *userRepository) GetByLogin(ctx context.Context, login string) (*models.User, error) {
+func (r *userRepository) GetByLogin(ctx context.Context, login string) (*models.User, string, error) {
 	query := `
-		SELECT id, full_name, login, password_hash, role, created_at
-		FROM users
-		WHERE login = $1
+		SELECT 
+			u.id,
+			u.full_name,
+			u.login,
+			u.password_hash,
+			u.role_id,
+			u.created_at,
+			r.name
+		FROM users u
+		JOIN roles r ON r.id = u.role_id
+		WHERE u.login = $1
 	`
 
 	var user models.User
+	var roleName string
 
 	err := r.db.Pool.QueryRow(ctx, query, login).Scan(
 		&user.ID,
 		&user.FullName,
 		&user.Login,
 		&user.PasswordHash,
-		&user.Role,
+		&user.RoleID,
 		&user.CreatedAt,
+		&roleName,
 	)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("user not found")
+			return nil, "", errors.New("user not found")
 		}
-		return nil, err
+		return nil, "", err
 	}
 
-	return &user, nil
+	return &user, roleName, nil
 }
 
-func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.User, string, error) {
 	query := `
-		SELECT id, full_name, login, password_hash, role, created_at
-		FROM users
-		WHERE id = $1
+		SELECT 
+			u.id,
+			u.full_name,
+			u.login,
+			u.password_hash,
+			u.role_id,
+			u.created_at,
+			r.name
+		FROM users u
+		JOIN roles r ON r.id = u.role_id
+		WHERE u.id = $1
 	`
 
 	var user models.User
+	var roleName string
 
 	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.FullName,
 		&user.Login,
 		&user.PasswordHash,
-		&user.Role,
+		&user.RoleID,
 		&user.CreatedAt,
+		&roleName,
 	)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("user not found")
+			return nil, "", errors.New("user not found")
 		}
-		return nil, err
+		return nil, "", err
 	}
 
-	return &user, nil
+	return &user, roleName, nil
 }

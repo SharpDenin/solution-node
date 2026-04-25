@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,8 +12,21 @@ type User struct {
 	FullName     string    `db:"full_name"`
 	Login        string    `db:"login"`
 	PasswordHash string    `db:"password_hash"`
-	Role         string    `db:"role"`
+	RoleID       uuid.UUID `db:"role_id"`
 	CreatedAt    time.Time `db:"created_at"`
+}
+
+type Role struct {
+	ID   uuid.UUID `db:"id"`
+	Name string    `db:"name"`
+}
+
+type Checklist struct {
+	ID            uuid.UUID `db:"id"`
+	Name          string    `db:"name"`
+	Code          string    `db:"code"`
+	AllowedRoleID uuid.UUID `db:"allowed_role_id"`
+	CreatedAt     time.Time `db:"created_at"`
 }
 
 type Place struct {
@@ -22,20 +36,23 @@ type Place struct {
 }
 
 type Report struct {
-	ID              uuid.UUID `db:"id"`
-	UserID          uuid.UUID `db:"user_id"`
-	PlaceID         uuid.UUID `db:"place_id"`
-	ReportDate      time.Time `db:"report_date"`
-	ResponsibleName string    `db:"responsible_name"`
-	CreatedAt       time.Time `db:"created_at"`
+	ID              uuid.UUID       `db:"id"`
+	UserID          uuid.UUID       `db:"user_id"`
+	ChecklistID     uuid.UUID       `db:"checklist_id"`
+	ReportDate      time.Time       `db:"report_date"`
+	ResponsibleName string          `db:"responsible_name"`
+	Metadata        json.RawMessage `db:"metadata"`
+	CreatedAt       time.Time       `db:"created_at"`
 }
 
 type Question struct {
-	ID         uuid.UUID `db:"id"`
-	Text       string    `db:"text"`
-	OrderIndex int       `db:"order_index"`
-	IsActive   bool      `db:"is_active"`
-	CreatedAt  time.Time `db:"created_at"`
+	ID          uuid.UUID `db:"id"`
+	Text        string    `db:"text"`
+	OrderIndex  int       `db:"order_index"`
+	IsActive    bool      `db:"is_active"`
+	ChecklistID uuid.UUID `db:"checklist_id"`
+	Formula     *string   `db:"formula"`
+	CreatedAt   time.Time `db:"created_at"`
 }
 
 type Answer struct {
@@ -44,5 +61,6 @@ type Answer struct {
 	QuestionID uuid.UUID `db:"question_id"`
 	AnswerText string    `db:"answer_text"`
 	ImageURL   *string   `db:"image_url"`
+	Result     *string   `db:"result"`
 	CreatedAt  time.Time `db:"created_at"`
 }

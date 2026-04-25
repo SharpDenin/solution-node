@@ -25,9 +25,13 @@ func NewAuthService(userRepo repository.UserRepository, tokenMgr TokenManager) *
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, fullName, login, password string) error {
-	if fullName == "" || login == "" || password == "" {
+func (s *AuthService) Register(ctx context.Context, fullName, login, password, role string) error {
+	if fullName == "" || login == "" || password == "" || role == "" {
 		return errors.New("invalid input")
+	}
+
+	if role != "node" && role != "phenophase" && role != "admin" {
+		return errors.New("invalid role")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -39,10 +43,9 @@ func (s *AuthService) Register(ctx context.Context, fullName, login, password st
 		FullName:     fullName,
 		Login:        login,
 		PasswordHash: string(hash),
-		Role:         "worker",
 	}
 
-	err = s.userRepo.Create(ctx, user)
+	err = s.userRepo.Create(ctx, user, role)
 	if err != nil {
 		if err.Error() == "user already exists" {
 			return err
@@ -58,7 +61,7 @@ func (s *AuthService) Login(ctx context.Context, login, password string) (string
 		return "", errors.New("invalid credentials")
 	}
 
-	user, err := s.userRepo.GetByLogin(ctx, login)
+	user, roleName, err := s.userRepo.GetByLogin(ctx, login)
 	if err != nil {
 		return "", errors.New("invalid credentials")
 	}
@@ -68,5 +71,5 @@ func (s *AuthService) Login(ctx context.Context, login, password string) (string
 		return "", errors.New("invalid credentials")
 	}
 
-	return s.tokenMgr.GenerateToken(user.ID.String(), user.Role)
+	return s.tokenMgr.GenerateToken(user.ID.String(), roleName)
 }

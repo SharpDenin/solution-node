@@ -4,9 +4,9 @@ import (
 	"backend/internal/handler/dtos/requests"
 	"backend/internal/service/question_service"
 	"encoding/json"
-	"github.com/google/uuid"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
@@ -22,13 +22,13 @@ func (h *QuestionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req requests.CreateQuestionRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", 400)
+		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
 	err := h.service.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -38,7 +38,20 @@ func (h *QuestionHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *QuestionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	res, err := h.service.GetAll(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
+func (h *QuestionHandler) GetByChecklist(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	checklistID := vars["id"]
+
+	res, err := h.service.GetByChecklist(r.Context(), checklistID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -46,24 +59,24 @@ func (h *QuestionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QuestionHandler) Update(w http.ResponseWriter, r *http.Request) {
-
 	vars := mux.Vars(r)
 	idStr := vars["id"]
+
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "invalid question id", 400)
+		http.Error(w, "invalid question id", http.StatusBadRequest)
 		return
 	}
 
 	var req requests.UpdateQuestionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", 400)
+		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
 	err = h.service.Update(r.Context(), id, req)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -76,7 +89,7 @@ func (h *QuestionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	err := h.service.Delete(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

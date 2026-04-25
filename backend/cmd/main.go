@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/service/checklist_service"
 	"context"
 	"log"
 	"net/http"
@@ -31,19 +32,28 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 	questionRepo := repository.NewQuestionRepository(db)
+	checklistRepo := repository.NewChecklistRepository(db)
 
 	// JWT
 	jwtManager := auth_service.NewJWTManager()
 
 	// Services
 	authService := auth_service.NewAuthService(userRepo, jwtManager)
-	reportService := report_service.NewReportService(db, reportRepo)
 	questionService := question_service.NewQuestionService(questionRepo)
+	checklistService := checklist_service.NewChecklistService(checklistRepo, userRepo)
+	reportService := report_service.NewReportService(
+		db,
+		reportRepo,
+		questionRepo,
+		checklistRepo,
+		userRepo,
+	)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	reportHandler := handler.NewReportHandler(reportService)
 	questionHandler := handler.NewQuestionHandler(questionService)
+	checklistHandler := handler.NewChecklistHandler(checklistService)
 
 	// File storage
 	fileStorage := storage.NewFileStorage(cfg.UploadDir, cfg.BaseURL)
@@ -58,6 +68,21 @@ func main() {
 	// AUTH
 	api.HandleFunc("/register", authHandler.Register).Methods("POST")
 	api.HandleFunc("/login", authHandler.Login).Methods("POST")
+
+	// CHECKLISTS
+	api.HandleFunc("/checklists", checklistHandler.GetAll).Methods("GET")
+
+	api.Handle("/checklists/available",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(checklistHandler.GetAvailableForCurrentUser),
+		),
+	).Methods("GET")
+
+	api.Handle("/checklists/{id}/questions",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(questionHandler.GetByChecklist),
+		),
+	).Methods("GET")
 
 	// UPLOAD
 	api.Handle("/upload",
@@ -121,7 +146,9 @@ func main() {
 	// QUESTIONS
 	api.Handle("/questions",
 		middleware.AuthMiddleware(jwtManager)(
-			http.HandlerFunc(questionHandler.GetAll),
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.GetAll),
+			),
 		),
 	).Methods("GET")
 
@@ -149,24 +176,26 @@ func main() {
 		),
 	).Methods("DELETE")
 
-	// ===== STATIC FILES (uploads) – без префикса /api =====
+	// STATIC FILES
 	fs := http.FileServer(http.Dir(cfg.UploadDir))
 	router.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", fs))
 
-	// ===== CORS MIDDLEWARE (оставьте как есть) =====
+	// CORS
 	allowedOrigins := make(map[string]bool)
 	for _, origin := range cfg.CorsAllowedOrigins {
 		if origin != "" {
 			allowedOrigins[origin] = true
 		}
 	}
+
 	corsMiddleware := middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins:   allowedOrigins,
 		AllowCredentials: cfg.CorsAllowCredentials,
 	})
+
 	handlerWithMiddleware := corsMiddleware(router)
 
-	// ===== SERVER =====
+	// SERVER
 	srv := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
 		Handler: handlerWithMiddleware,
@@ -181,13 +210,16 @@ func main() {
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	<-quit
 	log.Println("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
+
 	log.Println("Server exited gracefully")
 }

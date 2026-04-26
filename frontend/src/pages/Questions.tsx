@@ -1,27 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Question, Checklist } from '../types';
+import type { Question, Checklist, Phenophase, QuestionPhenophaseFormula } from '../types';
 
 export const Questions = () => {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [phenophases, setPhenophases] = useState<Phenophase[]>([]);
   const [activeChecklistId, setActiveChecklistId] = useState<string>('');
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  // Новый вопрос
+  // поля для нового вопроса
   const [newText, setNewText] = useState('');
   const [newOrder, setNewOrder] = useState(1);
-  const [newFormula, setNewFormula] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [newFormulaDefault, setNewFormulaDefault] = useState('');
+  const [newFormulas, setNewFormulas] = useState<QuestionPhenophaseFormula[]>([]);
 
-  // Редактирование
+  // редактирование
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [editOrder, setEditOrder] = useState(0);
   const [editChecklistId, setEditChecklistId] = useState('');
-  const [editFormula, setEditFormula] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editFormulaDefault, setEditFormulaDefault] = useState('');
+  const [editFormulas, setEditFormulas] = useState<QuestionPhenophaseFormula[]>([]);
 
   const [loading, setLoading] = useState(false);
 
-  // Загружаем чек-листы и устанавливаем первую вкладку активной
   useEffect(() => {
     api.get('/api/checklists').then(res => {
       setChecklists(res.data);
@@ -29,12 +33,13 @@ export const Questions = () => {
         setActiveChecklistId(res.data[0].id);
       }
     });
+    api.get('/api/phenophases').then(res => setPhenophases(res.data));
   }, []);
 
-  // При смене активной вкладки загружаем вопросы
   useEffect(() => {
     if (activeChecklistId) {
       loadQuestions(activeChecklistId);
+      resetNewForm();
     }
   }, [activeChecklistId]);
 
@@ -51,33 +56,84 @@ export const Questions = () => {
     }
   };
 
+  const resetNewForm = () => {
+    setNewText('');
+    setNewOrder(questions.length + 1);
+    setNewImageUrl('');
+    setNewFormulaDefault('');
+    if (activeChecklist?.code === 'sort_control') {
+      setNewFormulas(phenophases.map(p => ({ phenophase_id: p.id, formula: '' })));
+    } else {
+      setNewFormulas([]);
+    }
+  };
+
+  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
+  const isSortControl = activeChecklist?.code === 'sort_control';
+
   const addQuestion = async () => {
     if (!newText.trim()) return;
+    const payload: any = {
+      text: newText,
+      order_index: newOrder,
+      is_active: true,
+      checklist_id: activeChecklistId,
+      image_url: newImageUrl || undefined,
+    };
+    if (isSortControl) {
+      payload.formulas = newFormulas.filter(f => f.formula.trim() !== '');
+      payload.formula = undefined;
+    } else {
+      payload.formula = newFormulaDefault || undefined;
+      payload.formulas = [];
+    }
     try {
-      await api.post('/api/questions', {
-        text: newText,
-        order_index: newOrder,
-        checklist_id: activeChecklistId,
-        formula: newFormula || null,
-      });
-      setNewText('');
-      setNewFormula('');
-      setNewOrder(questions.length + 1);
+      await api.post('/api/questions', payload);
       loadQuestions(activeChecklistId);
     } catch {
       alert('Не удалось добавить вопрос');
     }
   };
 
-  const updateQuestion = async (id: string) => {
-    try {
-      await api.put(`/api/questions/${id}`, {
-        text: editText,
-        order_index: editOrder,
-        is_active: true,
-        checklist_id: editChecklistId,
-        formula: editFormula || null,
+  const startEdit = (q: Question) => {
+    setEditingId(q.id);
+    setEditText(q.text);
+    setEditOrder(q.order_index);
+    setEditChecklistId(q.checklist_id);
+    setEditImageUrl(q.image_url || '');
+    setEditFormulaDefault(q.formula || '');
+    if (isSortControl) {
+      const existingFormulas = q.formulas || [];
+      const merged = phenophases.map(p => {
+        const existing = existingFormulas.find(f => f.phenophase_id === p.id);
+        return {
+          phenophase_id: p.id,
+          formula: existing ? existing.formula : '',
+        };
       });
+      setEditFormulas(merged);
+    } else {
+      setEditFormulas([]);
+    }
+  };
+
+  const updateQuestion = async (id: string) => {
+    const payload: any = {
+      text: editText,
+      order_index: editOrder,
+      is_active: true,
+      checklist_id: editChecklistId,
+      image_url: editImageUrl || undefined,
+    };
+    if (isSortControl) {
+      payload.formulas = editFormulas.filter(f => f.formula.trim() !== '');
+      payload.formula = undefined;
+    } else {
+      payload.formula = editFormulaDefault || undefined;
+      payload.formulas = [];
+    }
+    try {
+      await api.put(`/api/questions/${id}`, payload);
       setEditingId(null);
       loadQuestions(activeChecklistId);
     } catch {
@@ -95,21 +151,10 @@ export const Questions = () => {
     }
   };
 
-  const startEdit = (q: Question) => {
-    setEditingId(q.id);
-    setEditText(q.text);
-    setEditOrder(q.order_index);
-    setEditChecklistId(q.checklist_id);
-    setEditFormula(q.formula || '');
-  };
-
-  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
-
   return (
     <div>
       <h2>Управление вопросами</h2>
 
-      {/* Вкладки чек-листов */}
       <div style={styles.tabs}>
         {checklists.map(cl => (
           <button
@@ -125,11 +170,9 @@ export const Questions = () => {
         ))}
       </div>
 
-      {/* Форма создания вопроса (всегда подставляется активный чек-лист) */}
+      {/* форма создания */}
       <div style={styles.newForm}>
-        <h3>
-          Новый вопрос для «{activeChecklist?.name || '...'}»
-        </h3>
+        <h3>Новый вопрос для «{activeChecklist?.name || '...'}»</h3>
         <input
           value={newText}
           onChange={e => setNewText(e.target.value)}
@@ -144,14 +187,51 @@ export const Questions = () => {
           style={styles.inputSmall}
         />
         <input
-          value={newFormula}
-          onChange={e => setNewFormula(e.target.value)}
-          placeholder="Формула (напр. >0.5)"
+          value={newImageUrl}
+          onChange={e => setNewImageUrl(e.target.value)}
+          placeholder="URL картинки (необязательно)"
           style={styles.input}
         />
-        <button onClick={addQuestion} style={styles.addBtn}>
-          Добавить
-        </button>
+
+        {!isSortControl ? (
+          <input
+            value={newFormulaDefault}
+            onChange={e => setNewFormulaDefault(e.target.value)}
+            placeholder="Формула (например >0.5)"
+            style={styles.input}
+          />
+        ) : (
+          <div style={styles.formulaList}>
+            <label>Формулы по фенофазам:</label>
+            {phenophases.map(p => {
+              const idx = newFormulas.findIndex(f => f.phenophase_id === p.id);
+              const value = idx >= 0 ? newFormulas[idx].formula : '';
+              const handleChange = (val: string) => {
+                setNewFormulas(prev => {
+                  const copy = [...prev];
+                  if (idx >= 0) {
+                    copy[idx] = { ...copy[idx], formula: val };
+                  } else {
+                    copy.push({ phenophase_id: p.id, formula: val });
+                  }
+                  return copy;
+                });
+              };
+              return (
+                <div key={p.id} style={styles.formulaRow}>
+                  <span style={styles.phenoName}>{p.name}:</span>
+                  <input
+                    value={value}
+                    onChange={e => handleChange(e.target.value)}
+                    placeholder="формула"
+                    style={{ ...styles.input, flex: 1 }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button onClick={addQuestion} style={styles.addBtn}>Добавить</button>
       </div>
 
       {loading && <p>Загрузка...</p>}
@@ -177,11 +257,48 @@ export const Questions = () => {
                 ))}
               </select>
               <input
-                value={editFormula}
-                onChange={e => setEditFormula(e.target.value)}
-                placeholder="Формула"
+                value={editImageUrl}
+                onChange={e => setEditImageUrl(e.target.value)}
+                placeholder="URL картинки"
                 style={styles.input}
               />
+
+              {!isSortControl ? (
+                <input
+                  value={editFormulaDefault}
+                  onChange={e => setEditFormulaDefault(e.target.value)}
+                  placeholder="Формула"
+                  style={styles.input}
+                />
+              ) : (
+                <div style={styles.formulaList}>
+                  {phenophases.map(p => {
+                    const idx = editFormulas.findIndex(f => f.phenophase_id === p.id);
+                    const value = idx >= 0 ? editFormulas[idx].formula : '';
+                    const handleChange = (val: string) => {
+                      setEditFormulas(prev => {
+                        const copy = [...prev];
+                        if (idx >= 0) {
+                          copy[idx] = { ...copy[idx], formula: val };
+                        } else {
+                          copy.push({ phenophase_id: p.id, formula: val });
+                        }
+                        return copy;
+                      });
+                    };
+                    return (
+                      <div key={p.id} style={styles.formulaRow}>
+                        <span style={styles.phenoName}>{p.name}:</span>
+                        <input
+                          value={value}
+                          onChange={e => handleChange(e.target.value)}
+                          style={{ ...styles.input, flex: 1 }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <button onClick={() => updateQuestion(q.id)} style={styles.saveBtn}>Сохранить</button>
               <button onClick={() => setEditingId(null)} style={styles.cancelBtn}>Отмена</button>
             </div>
@@ -189,8 +306,12 @@ export const Questions = () => {
             <>
               <div style={{ flex: 1 }}>
                 <strong>{q.order_index}.</strong> {q.text}
-                {q.formula && (
-                  <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>
+                {q.image_url && <img src={q.image_url} style={styles.thumb} alt="preview" />}
+                {q.formula && <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>}
+                {q.formulas && q.formulas.length > 0 && (
+                  <span style={{ color: '#6b7280', marginLeft: 8 }}>
+                    (формул: {q.formulas.length})
+                  </span>
                 )}
               </div>
               <button onClick={() => startEdit(q)} style={styles.editBtn}>✏️</button>
@@ -208,7 +329,6 @@ export const Questions = () => {
 };
 
 const styles = {
-  filterRow: { marginBottom: 20 },
   tabs: {
     display: 'flex',
     gap: 0,
@@ -242,4 +362,8 @@ const styles = {
   deleteBtn: { background: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'white' },
   saveBtn: { background: '#16a34a', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', marginRight: 8, color: 'white' },
   cancelBtn: { background: '#6b7280', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'white' },
+  formulaList: { marginBottom: 12 },
+  formulaRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 },
+  phenoName: { minWidth: 120, fontWeight: 500 },
+  thumb: { width: 30, height: 30, borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' },
 };

@@ -1,10 +1,9 @@
-export type UserRole = 'admin' | 'worker';
+export type UserRole = 'admin' | 'node' | 'phenophase';
 
 export interface Checklist {
   id: string;
   name: string;
-  code: string;             // 'default' | 'sort_control' ...
-  allowed_role_id?: string;
+  code: string; // 'default' | 'sort_control'
 }
 
 export interface Question {
@@ -14,6 +13,15 @@ export interface Question {
   is_active: boolean;
   checklist_id: string;
   formula?: string;
+  image_url?: string;
+  formulas?: QuestionPhenophaseFormula[];
+}
+
+export interface QuestionPhenophaseFormula {
+  id?: string;
+  question_id?: string;
+  phenophase_id: string;
+  formula: string;
 }
 
 export interface AnswerPayload {
@@ -29,9 +37,8 @@ export interface Report {
   checklist_id: string;
   report_date: string;
   responsible_name: string;
-  metadata?: string;        // JSON-строка с дополнительными данными
+  metadata?: any;
   created_at: string;
-  // поля, извлечённые из metadata (заполняются после парсинга)
   place?: string;
   sort?: string;
   priority_sort?: string;
@@ -45,10 +52,6 @@ export interface ReportDetail extends Report {
     image_url?: string;
     result?: 'good' | 'neutral' | 'bad';
   }>;
-  metadata?: string;
-  place?: string;
-  sort?: string;
-  priority_sort?: string;
 }
 
 export interface ReportFilters {
@@ -59,4 +62,30 @@ export interface ReportFilters {
   place?: string;
   sort?: string;
   priority_sort?: string;
+}
+
+export interface CurrentUser {
+  id: string;
+  full_name: string;
+  login: string;
+  role: UserRole;
+  position?: string;
+}
+
+export interface Variety {
+  id: string;
+  name: string;
+  description?: string;
+  priority: 'high' | 'low';
+  image_url?: string;
+  created_at?: string;
+}
+
+export interface Phenophase {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  order_index: number;
+  created_at?: string;
 }

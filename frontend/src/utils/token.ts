@@ -1,10 +1,10 @@
 import { jwtDecode } from 'jwt-decode';
+import type { UserRole } from '../types';
 
 export interface TokenPayload {
   user_id: string;
-  role: 'admin' | 'worker';
+  role: UserRole;
   exp: number;
-  // возможно, full_name? если нет, добавим позже
 }
 
 export const setToken = (token: string) => {

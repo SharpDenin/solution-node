@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/handler/dtos/requests"
+	"backend/internal/middleware"
 	"backend/internal/service/auth_service"
 	"encoding/json"
 	"net/http"
@@ -23,17 +24,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.FullName == "" || req.Login == "" || req.Password == "" || req.Role == "" {
-		http.Error(w, "missing required fields", http.StatusBadRequest)
-		return
-	}
-
 	err := h.authService.Register(
 		r.Context(),
 		req.FullName,
 		req.Login,
 		req.Password,
 		req.Role,
+		req.Position,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -51,12 +48,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Login == "" || req.Password == "" {
-		http.Error(w, "missing credentials", http.StatusBadRequest)
-		return
-	}
-
-	token, err := h.authService.Login(r.Context(), req.Login, req.Password)
+	token, err := h.authService.Login(
+		r.Context(),
+		req.FullName,
+		req.Login,
+		req.Password,
+	)
 	if err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -65,4 +62,20 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"token": token,
 	})
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok || userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.authService.GetCurrentUser(r.Context(), userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	json.NewEncoder(w).Encode(user)
 }

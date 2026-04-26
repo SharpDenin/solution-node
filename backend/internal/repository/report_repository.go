@@ -14,6 +14,8 @@ type ReportFilters struct {
 	DateFrom        *string
 	DateTo          *string
 	ChecklistID     *string
+	VarietyID       *string
+	PhenophaseID    *string
 	UserID          *string
 	UserName        *string
 	MetadataFilters map[string]string
@@ -22,11 +24,27 @@ type ReportFilters struct {
 }
 
 type ReportRepository interface {
-	CreateReport(ctx context.Context, tx Tx, userID uuid.UUID, checklistID uuid.UUID,
-		reportDate string, responsibleName string, metadata []byte) (uuid.UUID, error)
+	CreateReport(
+		ctx context.Context,
+		tx Tx,
+		userID uuid.UUID,
+		checklistID uuid.UUID,
+		varietyID *uuid.UUID,
+		phenophaseID *uuid.UUID,
+		reportDate string,
+		responsibleName string,
+		metadata []byte,
+	) (uuid.UUID, error)
 
-	CreateAnswer(ctx context.Context, tx Tx, reportID uuid.UUID, questionID uuid.UUID,
-		answerText string, imageURL *string, result *string) error
+	CreateAnswer(
+		ctx context.Context,
+		tx Tx,
+		reportID uuid.UUID,
+		questionID uuid.UUID,
+		answerText string,
+		imageURL *string,
+		result *string,
+	) error
 
 	GetReports(ctx context.Context, filters ReportFilters) ([]dtos.ReportResponse, error)
 	GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error)
@@ -41,18 +59,28 @@ func NewReportRepository(db *DB) ReportRepository {
 	return &reportRepository{db: db}
 }
 
-func (r *reportRepository) CreateReport(ctx context.Context, tx Tx, userID uuid.UUID,
-	checklistID uuid.UUID, reportDate string, responsibleName string, metadata []byte,
+func (r *reportRepository) CreateReport(
+	ctx context.Context,
+	tx Tx,
+	userID uuid.UUID,
+	checklistID uuid.UUID,
+	varietyID *uuid.UUID,
+	phenophaseID *uuid.UUID,
+	reportDate string,
+	responsibleName string,
+	metadata []byte,
 ) (uuid.UUID, error) {
 	query := `
 		INSERT INTO reports (
 			user_id,
 			checklist_id,
+			variety_id,
+			phenophase_id,
 			report_date,
 			responsible_name,
 			metadata
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
 	`
 
@@ -61,6 +89,8 @@ func (r *reportRepository) CreateReport(ctx context.Context, tx Tx, userID uuid.
 	err := tx.QueryRow(ctx, query,
 		userID,
 		checklistID,
+		varietyID,
+		phenophaseID,
 		reportDate,
 		responsibleName,
 		metadata,
@@ -73,8 +103,14 @@ func (r *reportRepository) CreateReport(ctx context.Context, tx Tx, userID uuid.
 	return reportID, nil
 }
 
-func (r *reportRepository) CreateAnswer(ctx context.Context, tx Tx, reportID uuid.UUID,
-	questionID uuid.UUID, answerText string, imageURL *string, result *string,
+func (r *reportRepository) CreateAnswer(
+	ctx context.Context,
+	tx Tx,
+	reportID uuid.UUID,
+	questionID uuid.UUID,
+	answerText string,
+	imageURL *string,
+	result *string,
 ) error {
 	query := `
 		INSERT INTO answers (
@@ -87,7 +123,8 @@ func (r *reportRepository) CreateAnswer(ctx context.Context, tx Tx, reportID uui
 		VALUES ($1, $2, $3, $4, $5)
 	`
 
-	_, err := tx.Exec(ctx, query,
+	_, err := tx.Exec(ctx,
+		query,
 		reportID,
 		questionID,
 		answerText,
@@ -104,6 +141,9 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 			r.id,
 			r.user_id,
 			r.checklist_id,
+			r.variety_id,
+			r.phenophase_id,
+			COALESCE(r.place, '') AS place,
 			r.report_date,
 			r.responsible_name,
 			r.metadata,
@@ -121,28 +161,43 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 		args = append(args, *f.DateFrom)
 		argID++
 	}
+
 	if f.DateTo != nil {
 		query += " AND r.report_date <= $" + fmt.Sprint(argID)
 		args = append(args, *f.DateTo)
 		argID++
 	}
+
 	if f.ChecklistID != nil {
 		query += " AND r.checklist_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.ChecklistID)
 		argID++
 	}
+
+	if f.VarietyID != nil {
+		query += " AND r.variety_id = $" + fmt.Sprint(argID)
+		args = append(args, *f.VarietyID)
+		argID++
+	}
+
+	if f.PhenophaseID != nil {
+		query += " AND r.phenophase_id = $" + fmt.Sprint(argID)
+		args = append(args, *f.PhenophaseID)
+		argID++
+	}
+
 	if f.UserID != nil {
 		query += " AND r.user_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.UserID)
 		argID++
 	}
+
 	if f.UserName != nil {
 		query += " AND u.full_name ILIKE $" + fmt.Sprint(argID)
 		args = append(args, "%"+*f.UserName+"%")
 		argID++
 	}
 
-	// ===== ВОТ ЭТО НАДО ДОБАВИТЬ =====
 	for key, value := range f.MetadataFilters {
 		query += fmt.Sprintf(" AND r.metadata->>$%d ILIKE $%d", argID, argID+1)
 		args = append(args, key, "%"+value+"%")
@@ -150,9 +205,11 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 	}
 
 	query += " ORDER BY r.report_date DESC"
+
 	query += " LIMIT $" + fmt.Sprint(argID)
 	args = append(args, f.Limit)
 	argID++
+
 	query += " OFFSET $" + fmt.Sprint(argID)
 	args = append(args, f.Offset)
 
@@ -162,25 +219,46 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 	}
 	defer rows.Close()
 
-	var reports []dtos.ReportResponse
+	reports := make([]dtos.ReportResponse, 0)
+
 	for rows.Next() {
-		var r dtos.ReportResponse
-		err := rows.Scan(&r.ID, &r.UserID, &r.ChecklistID, &r.ReportDate, &r.ResponsibleName, &r.Metadata, &r.CreatedAt)
+		var report dtos.ReportResponse
+
+		err := rows.Scan(
+			&report.ID,
+			&report.UserID,
+			&report.ChecklistID,
+			&report.VarietyID,
+			&report.PhenophaseID,
+			&report.Place,
+			&report.ReportDate,
+			&report.ResponsibleName,
+			&report.Metadata,
+			&report.CreatedAt,
+		)
 		if err != nil {
 			return nil, err
 		}
-		reports = append(reports, r)
+
+		reports = append(reports, report)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return reports, nil
 }
 
 func (r *reportRepository) GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error) {
-
 	query := `
 		SELECT 
 			r.id,
 			r.user_id,
 			r.checklist_id,
+			r.variety_id,
+			r.phenophase_id,
+			COALESCE(r.place, '') AS place,
 			r.report_date,
 			r.responsible_name,
 			r.metadata,
@@ -206,32 +284,41 @@ func (r *reportRepository) GetReportByID(ctx context.Context, id string) (*dtos.
 	var report *dtos.ReportDetailResponse
 
 	for rows.Next() {
-
 		var (
-			rID, userID, responsible string
-			checklistID              string
-			reportDate, createdAt    time.Time
-			metadata                 []byte
+			reportID        string
+			userID          string
+			checklistID     string
+			varietyID       *string
+			phenophaseID    *string
+			place           string
+			reportDate      time.Time
+			responsibleName string
+			metadata        []byte
+			createdAt       time.Time
 
-			qID, qText *string
-			answerText *string
-			imageURL   *string
-			result     *string
+			questionID   *string
+			questionText *string
+			answerText   *string
+			imageURL     *string
+			answerResult *string
 		)
 
 		err := rows.Scan(
-			&rID,
+			&reportID,
 			&userID,
 			&checklistID,
+			&varietyID,
+			&phenophaseID,
+			&place,
 			&reportDate,
-			&responsible,
+			&responsibleName,
 			&metadata,
 			&createdAt,
-			&qID,
-			&qText,
+			&questionID,
+			&questionText,
 			&answerText,
 			&imageURL,
-			&result,
+			&answerResult,
 		)
 		if err != nil {
 			return nil, err
@@ -239,26 +326,33 @@ func (r *reportRepository) GetReportByID(ctx context.Context, id string) (*dtos.
 
 		if report == nil {
 			report = &dtos.ReportDetailResponse{
-				ID:              rID,
+				ID:              reportID,
 				UserID:          userID,
 				ChecklistID:     checklistID,
+				VarietyID:       varietyID,
+				PhenophaseID:    phenophaseID,
+				Place:           place,
 				ReportDate:      reportDate,
-				ResponsibleName: responsible,
+				ResponsibleName: responsibleName,
 				Metadata:        metadata,
 				CreatedAt:       createdAt,
 				Answers:         []dtos.AnswerResponse{},
 			}
 		}
 
-		if qID != nil {
+		if questionID != nil {
 			report.Answers = append(report.Answers, dtos.AnswerResponse{
-				QuestionID:   *qID,
-				QuestionText: *qText,
+				QuestionID:   *questionID,
+				QuestionText: derefString(questionText),
 				AnswerText:   derefString(answerText),
 				ImageURL:     imageURL,
-				Result:       result,
+				Result:       answerResult,
 			})
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	if report == nil {
@@ -267,12 +361,15 @@ func (r *reportRepository) GetReportByID(ctx context.Context, id string) (*dtos.
 
 	return report, nil
 }
+
 func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilters) ([]dtos.ReportDetailResponse, error) {
 	query := `
 		SELECT 
 			r.id,
 			r.user_id,
 			r.checklist_id,
+			r.variety_id,
+			r.phenophase_id,
 			COALESCE(r.place, '') AS place,
 			r.report_date,
 			r.responsible_name,
@@ -311,6 +408,18 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 		argID++
 	}
 
+	if f.VarietyID != nil {
+		query += " AND r.variety_id = $" + fmt.Sprint(argID)
+		args = append(args, *f.VarietyID)
+		argID++
+	}
+
+	if f.PhenophaseID != nil {
+		query += " AND r.phenophase_id = $" + fmt.Sprint(argID)
+		args = append(args, *f.PhenophaseID)
+		argID++
+	}
+
 	if f.UserID != nil {
 		query += " AND r.user_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.UserID)
@@ -344,6 +453,8 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 			reportID        string
 			userID          string
 			checklistID     string
+			varietyID       *string
+			phenophaseID    *string
 			place           string
 			reportDate      time.Time
 			responsibleName string
@@ -361,6 +472,8 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 			&reportID,
 			&userID,
 			&checklistID,
+			&varietyID,
+			&phenophaseID,
 			&place,
 			&reportDate,
 			&responsibleName,
@@ -382,6 +495,8 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 				ID:              reportID,
 				UserID:          userID,
 				ChecklistID:     checklistID,
+				VarietyID:       varietyID,
+				PhenophaseID:    phenophaseID,
 				Place:           place,
 				ReportDate:      reportDate,
 				ResponsibleName: responsibleName,

@@ -12,6 +12,8 @@ type ReportDetailResponse struct {
 	ReportDate      time.Time        `json:"report_date"`
 	ResponsibleName string           `json:"responsible_name"`
 	ChecklistID     string           `json:"checklist_id"`
+	VarietyID       *string          `json:"variety_id"`
+	PhenophaseID    *string          `json:"phenophase_id"`
 	Metadata        json.RawMessage  `json:"metadata"`
 	CreatedAt       time.Time        `json:"created_at"`
 	Answers         []AnswerResponse `json:"answers"`

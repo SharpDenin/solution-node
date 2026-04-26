@@ -91,14 +91,10 @@ func main() {
 		),
 	).Methods("POST")
 
-	// TEST
+	// USER
 	api.Handle("/me",
 		middleware.AuthMiddleware(jwtManager)(
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				userID := r.Context().Value(middleware.UserIDKey)
-				role := r.Context().Value(middleware.RoleKey)
-				w.Write([]byte("Hello user " + userID.(string) + " role: " + role.(string)))
-			}),
+			http.HandlerFunc(authHandler.Me),
 		),
 	).Methods("GET")
 
@@ -172,6 +168,80 @@ func main() {
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(questionHandler.Delete),
+			),
+		),
+	).Methods("DELETE")
+
+	// VARIETIES
+	api.Handle("/varieties",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(varietyHandler.GetAll),
+		),
+	).Methods("GET")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(varietyHandler.GetByID),
+		),
+	).Methods("GET")
+
+	api.Handle("/varieties",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Create),
+			),
+		),
+	).Methods("POST")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Update),
+			),
+		),
+	).Methods("PUT")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Delete),
+			),
+		),
+	).Methods("DELETE")
+
+	// PHENOPHASES
+	api.Handle("/phenophases",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(phenophaseHandler.GetAll),
+		),
+	).Methods("GET")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(phenophaseHandler.GetByID),
+		),
+	).Methods("GET")
+
+	api.Handle("/phenophases",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Create),
+			),
+		),
+	).Methods("POST")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Update),
+			),
+		),
+	).Methods("PUT")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Delete),
 			),
 		),
 	).Methods("DELETE")

@@ -48,54 +48,7 @@ func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-
-	filters := repository.ReportFilters{
-		Limit:           10,
-		Offset:          0,
-		MetadataFilters: make(map[string]string),
-	}
-
-	if v := query.Get("date_from"); v != "" {
-		filters.DateFrom = &v
-	}
-
-	if v := query.Get("date_to"); v != "" {
-		filters.DateTo = &v
-	}
-
-	if v := query.Get("checklist_id"); v != "" {
-		filters.ChecklistID = &v
-	}
-
-	if v := query.Get("user_id"); v != "" {
-		filters.UserID = &v
-	}
-
-	if v := query.Get("user_name"); v != "" {
-		filters.UserName = &v
-	}
-
-	if v := query.Get("limit"); v != "" {
-		fmt.Sscanf(v, "%d", &filters.Limit)
-	}
-
-	if v := query.Get("offset"); v != "" {
-		fmt.Sscanf(v, "%d", &filters.Offset)
-	}
-
-	for key, values := range query {
-		if len(values) == 0 {
-			continue
-		}
-
-		if strings.HasPrefix(key, "metadata_") {
-			metaKey := strings.TrimPrefix(key, "metadata_")
-			if metaKey != "" && values[0] != "" {
-				filters.MetadataFilters[metaKey] = values[0]
-			}
-		}
-	}
+	filters := parseReportFilters(r)
 
 	reports, err := h.reportService.GetReports(r.Context(), filters)
 	if err != nil {
@@ -103,6 +56,7 @@ func (h *ReportHandler) GetReports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reports)
 }
 
@@ -120,44 +74,7 @@ func (h *ReportHandler) GetReportByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-
-	filters := repository.ReportFilters{
-		MetadataFilters: make(map[string]string),
-	}
-
-	if v := query.Get("date_from"); v != "" {
-		filters.DateFrom = &v
-	}
-
-	if v := query.Get("date_to"); v != "" {
-		filters.DateTo = &v
-	}
-
-	if v := query.Get("checklist_id"); v != "" {
-		filters.ChecklistID = &v
-	}
-
-	if v := query.Get("user_id"); v != "" {
-		filters.UserID = &v
-	}
-
-	if v := query.Get("user_name"); v != "" {
-		filters.UserName = &v
-	}
-
-	for key, values := range query {
-		if len(values) == 0 {
-			continue
-		}
-
-		if strings.HasPrefix(key, "metadata_") {
-			metaKey := strings.TrimPrefix(key, "metadata_")
-			if metaKey != "" && values[0] != "" {
-				filters.MetadataFilters[metaKey] = values[0]
-			}
-		}
-	}
+	filters := parseReportFilters(r)
 
 	reports, err := h.reportService.ExportReports(r.Context(), filters)
 	if err != nil {
@@ -221,7 +138,6 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 		file.SetCellStyle(sheetName, startCell, endCell, headerStyle)
 		row++
 
-		// Парсим метаданные
 		var meta map[string]interface{}
 		if err := json.Unmarshal(report.Metadata, &meta); err != nil {
 			meta = make(map[string]interface{})
@@ -235,10 +151,10 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Формируем читаемый текст метаданных
 		var metaText string
 		if sortValue, ok := meta["sort"].(string); ok && sortValue != "" {
 			priority := ""
+
 			if prio, ok := meta["priority_sort"].(string); ok {
 				if prio == "high" {
 					priority = " (приоритет: высокий)"
@@ -246,18 +162,17 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 					priority = " (приоритет: низкий)"
 				}
 			}
+
 			metaText = fmt.Sprintf("Сорт: %s%s", sortValue, priority)
 		} else if placeValue, ok := meta["place"].(string); ok && placeValue != "" {
 			metaText = fmt.Sprintf("Место: %s", placeValue)
 		} else {
-			// На случай, если metadata пришла в неожиданном формате
 			metaText = fmt.Sprintf("Метаданные: %s", string(report.Metadata))
 		}
 
 		file.SetCellValue(sheetName, metaCell, metaText)
 		row++
 
-		// Заголовки таблицы ответов
 		headers := []string{"Вопрос", "Ответ", "Результат", "Изображение"}
 		for i, title := range headers {
 			col := string(rune('A' + i))
@@ -266,13 +181,18 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 			file.SetCellValue(sheetName, cell, title)
 			file.SetCellStyle(sheetName, cell, cell, headerStyle)
 		}
+
 		row++
 
 		if len(report.Answers) == 0 {
 			emptyCell := fmt.Sprintf("A%d", row)
 			emptyEnd := fmt.Sprintf("D%d", row)
 
-			file.MergeCell(sheetName, emptyCell, emptyEnd)
+			if err := file.MergeCell(sheetName, emptyCell, emptyEnd); err != nil {
+				http.Error(w, "Ошибка объединения ячеек", http.StatusInternalServerError)
+				return
+			}
+
 			file.SetCellValue(sheetName, emptyCell, "Нет ответов")
 			row++
 		} else {
@@ -280,7 +200,6 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 				file.SetCellValue(sheetName, fmt.Sprintf("A%d", row), ans.QuestionText)
 				file.SetCellValue(sheetName, fmt.Sprintf("B%d", row), ans.AnswerText)
 
-				// Локализация результата
 				resultText := ""
 				if ans.Result != nil {
 					switch *ans.Result {
@@ -294,6 +213,7 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 						resultText = *ans.Result
 					}
 				}
+
 				file.SetCellValue(sheetName, fmt.Sprintf("C%d", row), resultText)
 
 				if ans.ImageURL != nil {
@@ -323,4 +243,55 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 	if err := file.Write(w); err != nil {
 		log.Printf("Ошибка записи Excel: %v", err)
 	}
+}
+
+func parseReportFilters(r *http.Request) repository.ReportFilters {
+	query := r.URL.Query()
+
+	filters := repository.ReportFilters{
+		MetadataFilters: make(map[string]string),
+	}
+
+	if v := query.Get("date_from"); v != "" {
+		filters.DateFrom = &v
+	}
+
+	if v := query.Get("date_to"); v != "" {
+		filters.DateTo = &v
+	}
+
+	if v := query.Get("checklist_id"); v != "" {
+		filters.ChecklistID = &v
+	}
+
+	if v := query.Get("user_id"); v != "" {
+		filters.UserID = &v
+	}
+
+	if v := query.Get("user_name"); v != "" {
+		filters.UserName = &v
+	}
+
+	if v := query.Get("variety_id"); v != "" {
+		filters.VarietyID = &v
+	}
+
+	if v := query.Get("phenophase_id"); v != "" {
+		filters.PhenophaseID = &v
+	}
+
+	for key, values := range query {
+		if len(values) == 0 {
+			continue
+		}
+
+		if strings.HasPrefix(key, "metadata_") {
+			metaKey := strings.TrimPrefix(key, "metadata_")
+			if metaKey != "" && values[0] != "" {
+				filters.MetadataFilters[metaKey] = values[0]
+			}
+		}
+	}
+
+	return filters
 }

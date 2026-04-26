@@ -151,6 +151,10 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 			return errors.New("question not found")
 		}
 
+		if question == nil {
+			return errors.New("question not found")
+		}
+
 		if question.ChecklistID != checklistID {
 			return errors.New("question does not belong to checklist")
 		}
@@ -203,6 +207,17 @@ func (s *ReportService) GetReportByID(ctx context.Context, id string) (*dtos.Rep
 
 func (s *ReportService) ExportReports(ctx context.Context, filters repository.ReportFilters) ([]dtos.ReportDetailResponse, error) {
 	return s.reportRepo.GetReportsDetailed(ctx, filters)
+}
+
+func (s *ReportService) GetPhenophaseMatrixReport(
+	ctx context.Context,
+	varietyID uuid.UUID,
+) (*dtos.PhenophaseMatrixReportResponse, error) {
+	if varietyID == uuid.Nil {
+		return nil, errors.New("variety_id is required")
+	}
+
+	return s.reportRepo.GetPhenophaseMatrixReport(ctx, varietyID)
 }
 
 func evaluateAnswer(formula *string, answerText string) *string {

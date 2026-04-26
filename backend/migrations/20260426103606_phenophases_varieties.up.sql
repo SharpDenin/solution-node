@@ -34,6 +34,7 @@ CREATE TABLE question_phenophase_formulas (
                                               phenophase_id UUID NOT NULL REFERENCES phenophases(id) ON DELETE CASCADE,
                                               formula TEXT NOT NULL,
                                               created_at TIMESTAMP DEFAULT now(),
+                                              updated_at TIMESTAMP DEFAULT now(),
                                               UNIQUE(question_id, phenophase_id)
 );
 

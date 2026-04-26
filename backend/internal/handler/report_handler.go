@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/xuri/excelize/v2"
 )
@@ -243,6 +244,29 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 	if err := file.Write(w); err != nil {
 		log.Printf("Ошибка записи Excel: %v", err)
 	}
+}
+
+func (h *ReportHandler) GetPhenophaseMatrixReport(w http.ResponseWriter, r *http.Request) {
+	varietyIDRaw := r.URL.Query().Get("variety_id")
+	if varietyIDRaw == "" {
+		http.Error(w, "variety_id is required", http.StatusBadRequest)
+		return
+	}
+
+	varietyID, err := uuid.Parse(varietyIDRaw)
+	if err != nil {
+		http.Error(w, "invalid variety_id", http.StatusBadRequest)
+		return
+	}
+
+	report, err := h.reportService.GetPhenophaseMatrixReport(r.Context(), varietyID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
 }
 
 func parseReportFilters(r *http.Request) repository.ReportFilters {

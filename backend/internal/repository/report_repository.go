@@ -49,6 +49,7 @@ type ReportRepository interface {
 	GetReports(ctx context.Context, filters ReportFilters) ([]dtos.ReportResponse, error)
 	GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error)
 	GetReportsDetailed(ctx context.Context, filters ReportFilters) ([]dtos.ReportDetailResponse, error)
+	GetPhenophaseMatrixReport(ctx context.Context, varietyID uuid.UUID) (*dtos.PhenophaseMatrixReportResponse, error)
 }
 
 type reportRepository struct {
@@ -529,6 +530,183 @@ func (r *reportRepository) GetReportsDetailed(ctx context.Context, f ReportFilte
 	}
 
 	return result, nil
+}
+
+func (r *reportRepository) GetPhenophaseMatrixReport(
+	ctx context.Context,
+	varietyID uuid.UUID,
+) (*dtos.PhenophaseMatrixReportResponse, error) {
+	columnsQuery := `
+		SELECT id, name, order_index
+		FROM phenophases
+		ORDER BY order_index ASC
+	`
+
+	columnRows, err := r.db.Pool.Query(ctx, columnsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer columnRows.Close()
+
+	var columns []dtos.PhenophaseMatrixColumn
+
+	for columnRows.Next() {
+		var column dtos.PhenophaseMatrixColumn
+
+		if err := columnRows.Scan(
+			&column.PhenophaseID,
+			&column.Name,
+			&column.OrderIndex,
+		); err != nil {
+			return nil, err
+		}
+
+		columns = append(columns, column)
+	}
+
+	if err := columnRows.Err(); err != nil {
+		return nil, err
+	}
+
+	questionsQuery := `
+		SELECT
+			q.id,
+			q.text,
+			q.order_index
+		FROM questions q
+		INNER JOIN checklists c ON c.id = q.checklist_id
+		WHERE c.code = 'sort_control'
+		  AND q.is_active = true
+		ORDER BY q.order_index ASC
+	`
+
+	questionRows, err := r.db.Pool.Query(ctx, questionsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer questionRows.Close()
+
+	var rows []dtos.PhenophaseMatrixRow
+
+	for questionRows.Next() {
+		var row dtos.PhenophaseMatrixRow
+
+		if err := questionRows.Scan(
+			&row.QuestionID,
+			&row.Text,
+			&row.OrderIndex,
+		); err != nil {
+			return nil, err
+		}
+
+		row.Cells = make([]dtos.PhenophaseMatrixCell, 0, len(columns))
+
+		for _, column := range columns {
+			row.Cells = append(row.Cells, dtos.PhenophaseMatrixCell{
+				PhenophaseID: column.PhenophaseID,
+				ReportID:     nil,
+				AnswerText:   nil,
+				Result:       nil,
+				ImageURL:     nil,
+			})
+		}
+
+		rows = append(rows, row)
+	}
+
+	if err := questionRows.Err(); err != nil {
+		return nil, err
+	}
+
+	answersQuery := `
+		SELECT DISTINCT ON (a.question_id, r.phenophase_id)
+			a.question_id,
+			r.phenophase_id,
+			r.id AS report_id,
+			a.answer_text,
+			a.result,
+			a.image_url
+		FROM answers a
+		INNER JOIN reports r ON r.id = a.report_id
+		INNER JOIN questions q ON q.id = a.question_id
+		INNER JOIN checklists c ON c.id = q.checklist_id
+		WHERE r.variety_id = $1
+		  AND r.phenophase_id IS NOT NULL
+		  AND c.code = 'sort_control'
+		ORDER BY a.question_id, r.phenophase_id, r.report_date DESC, r.created_at DESC
+	`
+
+	answerRows, err := r.db.Pool.Query(ctx, answersQuery, varietyID)
+	if err != nil {
+		return nil, err
+	}
+	defer answerRows.Close()
+
+	type matrixAnswer struct {
+		QuestionID   uuid.UUID
+		PhenophaseID uuid.UUID
+		ReportID     uuid.UUID
+		AnswerText   string
+		Result       *string
+		ImageURL     *string
+	}
+
+	answersMap := make(map[uuid.UUID]map[uuid.UUID]matrixAnswer)
+
+	for answerRows.Next() {
+		var answer matrixAnswer
+
+		if err := answerRows.Scan(
+			&answer.QuestionID,
+			&answer.PhenophaseID,
+			&answer.ReportID,
+			&answer.AnswerText,
+			&answer.Result,
+			&answer.ImageURL,
+		); err != nil {
+			return nil, err
+		}
+
+		if _, ok := answersMap[answer.QuestionID]; !ok {
+			answersMap[answer.QuestionID] = make(map[uuid.UUID]matrixAnswer)
+		}
+
+		answersMap[answer.QuestionID][answer.PhenophaseID] = answer
+	}
+
+	if err := answerRows.Err(); err != nil {
+		return nil, err
+	}
+
+	for rowIndex := range rows {
+		questionAnswers, ok := answersMap[rows[rowIndex].QuestionID]
+		if !ok {
+			continue
+		}
+
+		for cellIndex := range rows[rowIndex].Cells {
+			phenophaseID := rows[rowIndex].Cells[cellIndex].PhenophaseID
+
+			answer, ok := questionAnswers[phenophaseID]
+			if !ok {
+				continue
+			}
+
+			reportID := answer.ReportID
+			answerText := answer.AnswerText
+
+			rows[rowIndex].Cells[cellIndex].ReportID = &reportID
+			rows[rowIndex].Cells[cellIndex].AnswerText = &answerText
+			rows[rowIndex].Cells[cellIndex].Result = answer.Result
+			rows[rowIndex].Cells[cellIndex].ImageURL = answer.ImageURL
+		}
+	}
+
+	return &dtos.PhenophaseMatrixReportResponse{
+		VarietyID: varietyID,
+		Columns:   columns,
+		Rows:      rows,
+	}, nil
 }
 
 func derefString(s *string) string {

@@ -77,6 +77,7 @@ type QuestionPhenophaseFormula struct {
 	PhenophaseID uuid.UUID `db:"phenophase_id"`
 	Formula      string    `db:"formula"`
 	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
 type Answer struct {

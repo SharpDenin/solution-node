@@ -1,31 +1,32 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 
 const linkStyle = ({ isActive }: { isActive: boolean }) => ({
   textDecoration: 'none',
   color: isActive ? '#16a34a' : '#111827',
   backgroundColor: isActive ? '#e8f5ee' : 'transparent',
-  padding: '8px 12px',
+  padding: '10px 12px',
   borderRadius: '8px',
   transition: 'all 0.2s',
+  fontSize: '16px',
+  fontWeight: 500,
+  display: 'block',
 });
 
 export const AdminLayout = () => {
-  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    navigate('/');
   };
 
   return (
     <div style={styles.container}>
       <aside style={styles.sidebar}>
-        <div style={styles.logo}>📋 Растворные узлы</div>
+        <div style={styles.logo}>Панель администратора</div>
         <nav style={styles.nav}>
-          <NavLink to="/dashboard" style={linkStyle}>📊 Панель управления</NavLink>
+          <NavLink to="/dashboard" style={linkStyle}>📊 Отчёты</NavLink>
           <NavLink to="/questions" style={linkStyle}>❓ Вопросы</NavLink>
+          <NavLink to="/admin/users/create" style={linkStyle}>👤 Пользователи</NavLink>
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Выход</button>
       </aside>

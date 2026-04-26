@@ -1,61 +1,127 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
-import type { Question, AnswerPayload, Checklist } from '../types';
+import { useAuth } from '../context/AuthContext';
+import type { Question, AnswerPayload, Checklist, Variety, Phenophase } from '../types';
+
+interface QuestionCardProps {
+  question: Question;
+  answer?: AnswerPayload;
+  onAnswerChange: (text: string) => void;
+  onImageUpload: (file: File) => void;
+  onImageRemove: () => void;
+}
 
 export const ChecklistReport = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id: checklistId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { fullName, role } = useAuth();
 
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, AnswerPayload>>({});
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [responsible, setResponsible] = useState('');
+  const [date] = useState(new Date().toISOString().split('T')[0]);
+
   const [place, setPlace] = useState('');
-  const [sort, setSort] = useState('');
-  const [prioritySort, setPrioritySort] = useState('low'); // low / high
+  const [variety, setVariety] = useState<Variety | null>(null);
+  const [phenophase, setPhenophase] = useState<Phenophase | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!checklistId) return;
 
-    // Проверяем доступ через /api/checklists/available
-    api.get('/api/checklists/available')
-      .then(res => {
-        const accessible = res.data as Checklist[];
-        const found = accessible.find(c => c.id === id);
-        if (!found) {
-          alert('У вас нет доступа к этому чек-листу');
-          navigate('/');
-          return;
-        }
+    const loadChecklistById = () => {
+      return api.get('/api/checklists').then(res => {
+        const all = res.data as Checklist[];
+        const found = all.find(c => c.id === checklistId);
+        if (!found) throw new Error('Чек-лист не найден');
         setChecklist(found);
-        return api.get(`/api/checklists/${id}/questions`);
-      })
-      .then(qRes => {
-        if (!qRes) return;
-        const sorted = (qRes.data as Question[])
-          .filter(q => q.is_active)
-          .sort((a, b) => a.order_index - b.order_index);
-        setQuestions(sorted);
-      })
-      .catch(err => {
-        console.error('Ошибка загрузки данных чек-листа', err);
-        navigate('/login?returnUrl=/checklist/' + id);
-      })
-      .finally(() => setCheckingAccess(false));
-  }, [id, navigate]);
+        return found;
+      });
+    };
+
+    const loadQuestions = (cl: Checklist) => {
+      if (cl.code === 'sort_control') {
+        const varietyId = searchParams.get('varietyId');
+        const phenophaseId = searchParams.get('phenophaseId');
+        if (!varietyId || !phenophaseId) {
+          navigate(`/checklist/${checklistId}/variety`);
+          return Promise.reject('need selection');
+        }
+        return Promise.all([
+          api.get(`/api/varieties/${varietyId}`),
+          api.get(`/api/phenophases/${phenophaseId}`)
+        ]).then(([vRes, pRes]) => {
+          setVariety(vRes.data);
+          setPhenophase(pRes.data);
+        }).then(() => api.get(`/api/checklists/${checklistId}/questions`));
+      } else {
+        return api.get(`/api/checklists/${checklistId}/questions`);
+      }
+    };
+
+    const processData = (questionsData: any[]) => {
+      const sorted = (questionsData as Question[])
+        .filter(q => q.is_active)
+        .sort((a, b) => a.order_index - b.order_index);
+      setQuestions(sorted);
+    };
+
+    if (role === 'admin') {
+      loadChecklistById()
+        .then(cl => loadQuestions(cl))
+        .then(res => {
+          const data = res?.data;
+          if (Array.isArray(data)) {
+            processData(data);
+          } else if (data) {
+            processData(data);
+          }
+        })
+        .catch(err => {
+          if (err === 'need selection') return;
+          console.error(err);
+          alert('Ошибка загрузки данных чек-листа');
+          navigate('/');
+        })
+        .finally(() => setCheckingAccess(false));
+    } else {
+      api.get('/api/checklists/available')
+        .then(res => {
+          const accessible = res.data as Checklist[];
+          const found = accessible.find(c => c.id === checklistId);
+          if (!found) {
+            alert('У вас нет доступа к этому чек-листу');
+            navigate('/');
+            return Promise.reject('no access');
+          }
+          setChecklist(found);
+          return loadQuestions(found);
+        })
+        .then(res => {
+          const data = res?.data;
+          if (Array.isArray(data)) {
+            processData(data);
+          } else if (data) {
+            processData(data);
+          }
+        })
+        .catch(err => {
+          if (err === 'no access' || err === 'need selection') return;
+          console.error(err);
+          navigate('/login?returnUrl=/checklist/' + checklistId);
+        })
+        .finally(() => setCheckingAccess(false));
+    }
+  }, [checklistId, navigate, searchParams, role]);
 
   const updateAnswer = (qId: string, answer_text: string) => {
     setAnswers(prev => ({
       ...prev,
-      [qId]: {
-        ...prev[qId],
-        question_id: qId,
-        answer_text,
-      },
+      [qId]: { ...prev[qId], question_id: qId, answer_text },
     }));
   };
 
@@ -83,51 +149,57 @@ export const ChecklistReport = () => {
   const removeImage = (qId: string) => {
     setAnswers(prev => ({
       ...prev,
-      [qId]: {
-        ...prev[qId],
-        image_url: undefined,
-      },
+      [qId]: { ...prev[qId], image_url: undefined },
     }));
   };
 
-  const handleSubmit = async () => {
-    if (!date || !responsible) {
-      alert('Заполните обязательные поля (дата, ответственный)');
-      return;
-    }
-    const payload: any = {
-      checklist_id: id,
-      report_date: date,
-      responsible_name: responsible,
-      metadata: {},                          // ← теперь metadata всегда объект
-      answers: Object.values(answers).map(a => ({
-        question_id: a.question_id,
-        answer_text: a.answer_text,
-        image_url: a.image_url || '',
-      })),
-    };
+ const handleSubmit = async () => {
+  if (!date || !fullName) {
+    alert('Заполните обязательные поля');
+    return;
+  }
 
-    if (checklist?.code === 'sort_control') {
-      payload.metadata = {
-        sort: sort,
-        priority_sort: prioritySort,
-      };
-    } else if (checklist?.code === 'default') {
-      payload.metadata = {
-        place: place || 'Не указано',
-      };
-    }
-
-    setLoading(true);
-    try {
-      await api.post('/api/reports', payload);
-      navigate('/thank-you');
-    } catch {
-      alert('Ошибка отправки отчёта');
-    } finally {
-      setLoading(false);
-    }
+  const payload: any = {
+    checklist_id: checklistId,
+    report_date: date,
+    responsible_name: fullName,
+    metadata: {},
+    answers: Object.values(answers).map(a => ({
+      question_id: a.question_id,
+      answer_text: a.answer_text,
+      image_url: a.image_url || '',
+    })),
   };
+
+  if (checklist?.code === 'sort_control' && variety && phenophase) {
+    // Поля, обязательные для sort_control
+    payload.variety_id = variety.id;
+    payload.phenophase_id = phenophase.id;
+
+    payload.metadata = {
+      sort: variety.name,
+      priority_sort: variety.priority,
+      phenophase: phenophase.name,
+      variety_id: variety.id,
+      phenophase_id: phenophase.id,
+    };
+  } else if (checklist?.code === 'default') {
+    payload.metadata = {
+      place: place || 'Не указано',
+    };
+    // для default поля variety_id/phenophase_id не передаём
+  }
+
+  setLoading(true);
+  try {
+    await api.post('/api/reports', payload);
+    navigate('/thank-you');
+  } catch {
+    alert('Ошибка отправки отчёта');
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (checkingAccess) return <div>Проверка доступа...</div>;
   if (!checklist) return <div>Чек-лист не найден</div>;
@@ -136,22 +208,11 @@ export const ChecklistReport = () => {
     <div>
       <h2>{checklist.name}</h2>
       <div style={styles.formGroup}>
-        <label>Дата *</label>
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          style={styles.input}
-        />
-        <label>Ответственный *</label>
-        <input
-          placeholder="ФИО ответственного"
-          value={responsible}
-          onChange={e => setResponsible(e.target.value)}
-          style={styles.input}
-        />
+        <label>Дата</label>
+        <input type="date" value={date} disabled style={{ ...styles.input, backgroundColor: '#f3f4f6' }} />
+        <label>Ответственный</label>
+        <input value={fullName || ''} disabled style={{ ...styles.input, backgroundColor: '#f3f4f6' }} />
 
-        {/* Динамические поля в зависимости от кода чек-листа */}
         {checklist.code === 'default' && (
           <>
             <label>Место работ</label>
@@ -163,23 +224,37 @@ export const ChecklistReport = () => {
             />
           </>
         )}
-        {checklist.code === 'sort_control' && (
+
+        {checklist.code === 'sort_control' && variety && phenophase && (
           <>
             <label>Сорт</label>
             <input
-              value={sort}
-              onChange={e => setSort(e.target.value)}
-              style={styles.input}
+              value={variety.name}
+              disabled
+              style={{
+                ...styles.input,
+                backgroundColor: '#f3f4f6',
+                color: variety.priority === 'high' ? '#ef4444' : '#16a34a',
+                fontWeight: 600,
+              }}
             />
             <label>Приоритет сорта</label>
-            <select
-              value={prioritySort}
-              onChange={e => setPrioritySort(e.target.value)}
-              style={styles.input}
-            >
-              <option value="low">Низкий</option>
-              <option value="high">Высокий</option>
-            </select>
+            <input
+              value={variety.priority === 'high' ? 'Высокий' : 'Низкий'}
+              disabled
+              style={{
+                ...styles.input,
+                backgroundColor: '#f3f4f6',
+                color: variety.priority === 'high' ? '#ef4444' : '#16a34a',
+                fontWeight: 600,
+              }}
+            />
+            <label>Фенофаза</label>
+            <input
+              value={phenophase.name}
+              disabled
+              style={{ ...styles.input, backgroundColor: '#f3f4f6' }}
+            />
           </>
         )}
       </div>
@@ -203,15 +278,6 @@ export const ChecklistReport = () => {
     </div>
   );
 };
-
-// ---------- QuestionCard (без изменений) ----------
-interface QuestionCardProps {
-  question: Question;
-  answer?: AnswerPayload;
-  onAnswerChange: (text: string) => void;
-  onImageUpload: (file: File) => void;
-  onImageRemove: () => void;
-}
 
 const QuestionCard = ({
   question,
@@ -249,7 +315,12 @@ const QuestionCard = ({
 
   return (
     <div style={styles.questionCard}>
-      <b>{question.text}</b>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <b>{question.text}</b>
+        {question.image_url && (
+          <img src={question.image_url} style={{ width: 32, height: 32, borderRadius: 4 }} alt="q" />
+        )}
+      </div>
       <textarea
         placeholder="Ваш ответ"
         value={answer?.answer_text || ''}
@@ -282,16 +353,13 @@ const QuestionCard = ({
       {answer?.image_url && (
         <div style={styles.imagePreview}>
           <img src={answer.image_url} style={styles.image} alt="фото" />
-          <button onClick={onImageRemove} style={styles.removeImage}>
-            ✕
-          </button>
+          <button onClick={onImageRemove} style={styles.removeImage}>✕</button>
         </div>
       )}
     </div>
   );
 };
 
-// ------------- Стили -------------
 const styles: Record<string, CSSProperties> = {
   formGroup: { marginBottom: 24 },
   input: {

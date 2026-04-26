@@ -5,7 +5,8 @@ export const UserCreate = () => {
   const [fullName, setFullName] = useState('');
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('node'); // default to node specialist
+  const [role, setRole] = useState('node');
+  const [position, setPosition] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -18,12 +19,14 @@ export const UserCreate = () => {
         full_name: fullName,
         login,
         password,
-        role, // sends the string role directly (backend expects "admin", "node", "phenophase")
+        role,
+        position, // новое поле
       });
       setMessage('Пользователь успешно создан');
       setFullName('');
       setLogin('');
       setPassword('');
+      setPosition('');
     } catch (err: any) {
       setError(err.response?.data || 'Ошибка при создании');
     }
@@ -66,6 +69,13 @@ export const UserCreate = () => {
           <option value="node">Специалист по растворным узлам</option>
           <option value="phenophase">Специалист по фенофазам</option>
         </select>
+        <input
+          type="text"
+          placeholder="Должность (например: агроном)"
+          value={position}
+          onChange={e => setPosition(e.target.value)}
+          style={styles.input}
+        />
         <button type="submit" style={styles.button}>Создать</button>
         {message && <div style={styles.success}>{message}</div>}
         {error && <div style={styles.error}>{error}</div>}
@@ -80,7 +90,7 @@ const styles = {
     flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 'calc(100vh - 100px)', // vertical centering
+    minHeight: 'calc(100vh - 100px)',
     padding: '40px 16px 0',
   },
   title: {

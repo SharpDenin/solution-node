@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { decodeToken } from '../utils/token';
 
 export const Login = () => {
+  const [fullName, setFullName] = useState('');
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,9 +17,13 @@ export const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await api.post('/api/login', { login, password });
+      const res = await api.post('/api/login', {
+        full_name: fullName,
+        login,
+        password,
+      });
       const token = res.data.token;
-      authLogin(token);
+      await authLogin(token);
       const payload = decodeToken();
       const returnUrl = searchParams.get('returnUrl');
       if (payload?.role === 'admin') {
@@ -27,7 +32,7 @@ export const Login = () => {
         navigate(returnUrl || '/');
       }
     } catch {
-      setError('Неверный логин или пароль');
+      setError('Неверный логин, пароль или ФИО');
     }
   };
 
@@ -35,6 +40,14 @@ export const Login = () => {
     <div style={styles.page}>
       <form onSubmit={handleSubmit} style={styles.card}>
         <h2>Вход в систему</h2>
+        <input
+          type="text"
+          placeholder="ФИО"
+          value={fullName}
+          onChange={e => setFullName(e.target.value)}
+          style={styles.input}
+          required
+        />
         <input
           type="text"
           placeholder="Логин"

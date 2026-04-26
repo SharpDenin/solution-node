@@ -68,7 +68,7 @@ func (h *QuestionHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 func (h *QuestionHandler) GetByChecklist(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	checklistID, err := uuid.Parse(vars["checklistId"])
+	checklistID, err := uuid.Parse(vars["id"]) // было "checklistId"
 	if err != nil {
 		http.Error(w, "invalid checklist id", http.StatusBadRequest)
 		return

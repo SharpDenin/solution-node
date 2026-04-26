@@ -10,11 +10,16 @@ import { Questions } from './pages/Questions';
 import { ChecklistReport } from './pages/ChecklistReport';
 import { ThankYou } from './pages/ThankYou';
 import { UserCreate } from './pages/UserCreate';
+import { VarietySelectPage } from './pages/VarietySelectPage';
+import { PhenophaseSelectPage } from './pages/PhenophaseSelectPage';
+import { ChecklistEntry } from './pages/ChecklistEntry';
+import { VarietyManagePage } from './pages/VarietyManagePage';
+import { PhenophaseManagePage } from './pages/PhenophaseManagePage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PhenophaseMatrixPage } from './pages/PhenophaseMatrixPage';
 
 const AppRoutes = () => {
   const { isLoading } = useAuth();
-
   if (isLoading) return <div>Загрузка...</div>;
 
   return (
@@ -23,21 +28,26 @@ const AppRoutes = () => {
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
 
-      {/* Рабочий (worker) */}
-      <Route element={<ProtectedRoute allowedRoles={['worker']}><WorkerLayout /></ProtectedRoute>}>
-        <Route path="/checklist/:id" element={<ChecklistReport />} />
+      {/* Чек-листы – доступны любому авторизованному */}
+      <Route element={<ProtectedRoute><WorkerLayout /></ProtectedRoute>}>
+        <Route path="/checklist/:id" element={<ChecklistEntry />} />
+        <Route path="/checklist/:id/variety" element={<VarietySelectPage />} />
+        <Route path="/checklist/:id/phenophase" element={<PhenophaseSelectPage />} />
+        <Route path="/checklist/:id/fill" element={<ChecklistReport />} />
         <Route path="/thank-you" element={<ThankYou />} />
       </Route>
 
-      {/* Администратор */}
+      {/* Администратор – только admin */}
       <Route element={<ProtectedRoute allowedRoles={['admin']}><AdminLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/reports/:id" element={<ReportDetail />} />
         <Route path="/questions" element={<Questions />} />
         <Route path="/admin/users/create" element={<UserCreate />} />
+        <Route path="/varieties" element={<VarietyManagePage />} />
+        <Route path="/phenophases" element={<PhenophaseManagePage />} />
+        <Route path="/phenophase-matrix" element={<PhenophaseMatrixPage />} />
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

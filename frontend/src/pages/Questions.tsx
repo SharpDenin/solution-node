@@ -1,27 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Question, Checklist } from '../types';
+import { ImageUploader } from '../components/ImageUploader';
+import type { Question, Checklist, Phenophase, QuestionPhenophaseFormula } from '../types';
 
 export const Questions = () => {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [phenophases, setPhenophases] = useState<Phenophase[]>([]);
   const [activeChecklistId, setActiveChecklistId] = useState<string>('');
   const [questions, setQuestions] = useState<Question[]>([]);
 
-  // Новый вопрос
+  // поля для нового вопроса
   const [newText, setNewText] = useState('');
-  const [newOrder, setNewOrder] = useState(1);
-  const [newFormula, setNewFormula] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState<string | undefined>(undefined);
+  const [newFormulaDefault, setNewFormulaDefault] = useState('');
+  const [newFormulas, setNewFormulas] = useState<QuestionPhenophaseFormula[]>([]);
 
-  // Редактирование
+  // редактирование
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [editOrder, setEditOrder] = useState(0);
   const [editChecklistId, setEditChecklistId] = useState('');
-  const [editFormula, setEditFormula] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState<string | undefined>(undefined);
+  const [editFormulaDefault, setEditFormulaDefault] = useState('');
+  const [editFormulas, setEditFormulas] = useState<QuestionPhenophaseFormula[]>([]);
+  const [editOrder, setEditOrder] = useState(0); // не показываем, но храним для отправки
 
   const [loading, setLoading] = useState(false);
 
-  // Загружаем чек-листы и устанавливаем первую вкладку активной
   useEffect(() => {
     api.get('/api/checklists').then(res => {
       setChecklists(res.data);
@@ -29,12 +33,13 @@ export const Questions = () => {
         setActiveChecklistId(res.data[0].id);
       }
     });
+    api.get('/api/phenophases').then(res => setPhenophases(res.data));
   }, []);
 
-  // При смене активной вкладки загружаем вопросы
   useEffect(() => {
     if (activeChecklistId) {
       loadQuestions(activeChecklistId);
+      resetNewForm();
     }
   }, [activeChecklistId]);
 
@@ -51,33 +56,103 @@ export const Questions = () => {
     }
   };
 
+  const resetNewForm = () => {
+    setNewText('');
+    setNewImageUrl(undefined);
+    setNewFormulaDefault('');
+    if (activeChecklist?.code === 'sort_control') {
+      setNewFormulas(phenophases.map(p => ({ phenophase_id: p.id, formula: '' })));
+    } else {
+      setNewFormulas([]);
+    }
+  };
+
+  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
+  const isSortControl = activeChecklist?.code === 'sort_control';
+
+  const uploadImage = async (file: File): Promise<string | undefined> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data.url;
+    } catch {
+      alert('Ошибка загрузки изображения');
+      return undefined;
+    }
+  };
+
+  const getMaxOrderIndex = (): number => {
+    if (questions.length === 0) return 1;
+    return Math.max(...questions.map(q => q.order_index)) + 1;
+  };
+
   const addQuestion = async () => {
     if (!newText.trim()) return;
+    const orderIndex = getMaxOrderIndex();
+    const payload: any = {
+      text: newText,
+      order_index: orderIndex,
+      is_active: true,
+      checklist_id: activeChecklistId,
+      image_url: newImageUrl || undefined,
+    };
+    if (isSortControl) {
+      payload.formulas = newFormulas.filter(f => f.formula.trim() !== '');
+      payload.formula = undefined;
+    } else {
+      payload.formula = newFormulaDefault || undefined;
+      payload.formulas = [];
+    }
     try {
-      await api.post('/api/questions', {
-        text: newText,
-        order_index: newOrder,
-        checklist_id: activeChecklistId,
-        formula: newFormula || null,
-      });
-      setNewText('');
-      setNewFormula('');
-      setNewOrder(questions.length + 1);
+      await api.post('/api/questions', payload);
       loadQuestions(activeChecklistId);
     } catch {
       alert('Не удалось добавить вопрос');
     }
   };
 
-  const updateQuestion = async (id: string) => {
-    try {
-      await api.put(`/api/questions/${id}`, {
-        text: editText,
-        order_index: editOrder,
-        is_active: true,
-        checklist_id: editChecklistId,
-        formula: editFormula || null,
+  const startEdit = (q: Question) => {
+    setEditingId(q.id);
+    setEditText(q.text);
+    setEditChecklistId(q.checklist_id);
+    setEditImageUrl(q.image_url);
+    setEditFormulaDefault(q.formula || '');
+    setEditOrder(q.order_index); // сохраняем текущий порядок
+    if (isSortControl) {
+      const existingFormulas = q.formulas || [];
+      const merged = phenophases.map(p => {
+        const existing = existingFormulas.find(f => f.phenophase_id === p.id);
+        return {
+          phenophase_id: p.id,
+          formula: existing ? existing.formula : '',
+        };
       });
+      setEditFormulas(merged);
+    } else {
+      setEditFormulas([]);
+    }
+  };
+
+  const updateQuestion = async (id: string) => {
+    const payload: any = {
+      text: editText,
+      order_index: editOrder, // сохраняем текущий порядок без изменений
+      is_active: true,
+      checklist_id: editChecklistId,
+      image_url: editImageUrl || undefined,
+    };
+    if (isSortControl) {
+      payload.formulas = editFormulas.filter(f => f.formula.trim() !== '');
+      payload.formula = undefined;
+    } else {
+      payload.formula = editFormulaDefault || undefined;
+      payload.formulas = [];
+    }
+    try {
+      await api.put(`/api/questions/${id}`, payload);
       setEditingId(null);
       loadQuestions(activeChecklistId);
     } catch {
@@ -95,21 +170,10 @@ export const Questions = () => {
     }
   };
 
-  const startEdit = (q: Question) => {
-    setEditingId(q.id);
-    setEditText(q.text);
-    setEditOrder(q.order_index);
-    setEditChecklistId(q.checklist_id);
-    setEditFormula(q.formula || '');
-  };
-
-  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
-
   return (
     <div>
       <h2>Управление вопросами</h2>
 
-      {/* Вкладки чек-листов */}
       <div style={styles.tabs}>
         {checklists.map(cl => (
           <button
@@ -125,33 +189,62 @@ export const Questions = () => {
         ))}
       </div>
 
-      {/* Форма создания вопроса (всегда подставляется активный чек-лист) */}
       <div style={styles.newForm}>
-        <h3>
-          Новый вопрос для «{activeChecklist?.name || '...'}»
-        </h3>
+        <h3>Новый вопрос для «{activeChecklist?.name || '...'}»</h3>
         <input
           value={newText}
           onChange={e => setNewText(e.target.value)}
           placeholder="Текст вопроса"
           style={styles.input}
         />
-        <input
-          type="number"
-          value={newOrder}
-          onChange={e => setNewOrder(parseInt(e.target.value) || 0)}
-          placeholder="Порядок"
-          style={styles.inputSmall}
+        <ImageUploader
+          imageUrl={newImageUrl}
+          onUpload={async (file) => {
+            const url = await uploadImage(file);
+            if (url) setNewImageUrl(url);
+          }}
+          onRemove={() => setNewImageUrl(undefined)}
         />
-        <input
-          value={newFormula}
-          onChange={e => setNewFormula(e.target.value)}
-          placeholder="Формула (напр. >0.5)"
-          style={styles.input}
-        />
-        <button onClick={addQuestion} style={styles.addBtn}>
-          Добавить
-        </button>
+
+        {!isSortControl ? (
+          <input
+            value={newFormulaDefault}
+            onChange={e => setNewFormulaDefault(e.target.value)}
+            placeholder="Формула (например >0.5)"
+            style={styles.input}
+          />
+        ) : (
+          <div style={styles.formulaList}>
+            <label>Формулы по фенофазам:</label>
+            {phenophases.map(p => {
+              const idx = newFormulas.findIndex(f => f.phenophase_id === p.id);
+              const value = idx >= 0 ? newFormulas[idx].formula : '';
+              const handleChange = (val: string) => {
+                setNewFormulas(prev => {
+                  const copy = [...prev];
+                  if (idx >= 0) {
+                    copy[idx] = { ...copy[idx], formula: val };
+                  } else {
+                    copy.push({ phenophase_id: p.id, formula: val });
+                  }
+                  return copy;
+                });
+              };
+              return (
+                <div key={p.id} style={styles.formulaRow}>
+                  <span style={styles.phenoName}>{p.name}:</span>
+                  <input
+                    value={value}
+                    onChange={e => handleChange(e.target.value)}
+                    placeholder="формула"
+                    style={{ ...styles.input, flex: 1 }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button onClick={addQuestion} style={styles.addBtn}>Добавить</button>
       </div>
 
       {loading && <p>Загрузка...</p>}
@@ -161,12 +254,6 @@ export const Questions = () => {
           {editingId === q.id ? (
             <div style={{ flex: 1 }}>
               <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-              <input
-                type="number"
-                value={editOrder}
-                onChange={e => setEditOrder(parseInt(e.target.value) || 0)}
-                style={styles.inputSmall}
-              />
               <select
                 value={editChecklistId}
                 onChange={e => setEditChecklistId(e.target.value)}
@@ -176,12 +263,51 @@ export const Questions = () => {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <input
-                value={editFormula}
-                onChange={e => setEditFormula(e.target.value)}
-                placeholder="Формула"
-                style={styles.input}
+              <ImageUploader
+                imageUrl={editImageUrl}
+                onUpload={async (file) => {
+                  const url = await uploadImage(file);
+                  if (url) setEditImageUrl(url);
+                }}
+                onRemove={() => setEditImageUrl(undefined)}
               />
+
+              {!isSortControl ? (
+                <input
+                  value={editFormulaDefault}
+                  onChange={e => setEditFormulaDefault(e.target.value)}
+                  placeholder="Формула"
+                  style={styles.input}
+                />
+              ) : (
+                <div style={styles.formulaList}>
+                  {phenophases.map(p => {
+                    const idx = editFormulas.findIndex(f => f.phenophase_id === p.id);
+                    const value = idx >= 0 ? editFormulas[idx].formula : '';
+                    const handleChange = (val: string) => {
+                      setEditFormulas(prev => {
+                        const copy = [...prev];
+                        if (idx >= 0) {
+                          copy[idx] = { ...copy[idx], formula: val };
+                        } else {
+                          copy.push({ phenophase_id: p.id, formula: val });
+                        }
+                        return copy;
+                      });
+                    };
+                    return (
+                      <div key={p.id} style={styles.formulaRow}>
+                        <span style={styles.phenoName}>{p.name}:</span>
+                        <input
+                          value={value}
+                          onChange={e => handleChange(e.target.value)}
+                          style={{ ...styles.input, flex: 1 }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <button onClick={() => updateQuestion(q.id)} style={styles.saveBtn}>Сохранить</button>
               <button onClick={() => setEditingId(null)} style={styles.cancelBtn}>Отмена</button>
             </div>
@@ -189,8 +315,12 @@ export const Questions = () => {
             <>
               <div style={{ flex: 1 }}>
                 <strong>{q.order_index}.</strong> {q.text}
-                {q.formula && (
-                  <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>
+                {q.image_url && <img src={q.image_url} style={styles.thumb} alt="preview" />}
+                {q.formula && <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>}
+                {q.formulas && q.formulas.length > 0 && (
+                  <span style={{ color: '#6b7280', marginLeft: 8 }}>
+                    (формул: {q.formulas.length})
+                  </span>
                 )}
               </div>
               <button onClick={() => startEdit(q)} style={styles.editBtn}>✏️</button>
@@ -208,7 +338,6 @@ export const Questions = () => {
 };
 
 const styles = {
-  filterRow: { marginBottom: 20 },
   tabs: {
     display: 'flex',
     gap: 0,
@@ -234,7 +363,6 @@ const styles = {
   },
   newForm: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 24 },
   input: { width: '100%', padding: 8, marginBottom: 8, borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' as const },
-  inputSmall: { width: 100, padding: 8, marginRight: 8, borderRadius: 6, border: '1px solid #ccc' },
   select: { padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', marginBottom: 8 },
   addBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
   item: { background: 'white', padding: 12, borderRadius: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 },
@@ -242,4 +370,8 @@ const styles = {
   deleteBtn: { background: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'white' },
   saveBtn: { background: '#16a34a', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', marginRight: 8, color: 'white' },
   cancelBtn: { background: '#6b7280', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'pointer', color: 'white' },
+  formulaList: { marginBottom: 12 },
+  formulaRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 },
+  phenoName: { minWidth: 120, fontWeight: 500 },
+  thumb: { width: 30, height: 30, borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' },
 };

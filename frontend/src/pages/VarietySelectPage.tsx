@@ -29,17 +29,21 @@ export const VarietySelectPage = () => {
       <div style={styles.list}>
         {varieties.map(v => (
           <div key={v.id} style={styles.card}>
-            <div onClick={() => toggleDescription(v.id)} style={styles.cardHeader}>
-              <strong>{v.name}</strong>
-              {v.priority === 'high' && <span style={styles.highBadge}>⚠️ Высокий</span>}
-              {v.priority === 'low' && <span style={styles.lowBadge}>✅ Низкий</span>}
+            <div onClick={() => toggleDescription(v.id)} style={styles.cardBody}>
+              <div style={styles.titleRow}>
+                <strong>{v.name}</strong>
+                {v.priority === 'high' && <span style={styles.highBadge}>⚠️ Высокий</span>}
+                {v.priority === 'low' && <span style={styles.lowBadge}>✅ Низкий</span>}
+              </div>
               {v.image_url && (
-                <img src={v.image_url} style={styles.thumb} alt={v.name} />
+                <div style={styles.imageWrapper}>
+                  <img src={v.image_url} alt={v.name} style={styles.image} />
+                </div>
+              )}
+              {expandedId === v.id && v.description && (
+                <div style={styles.description}>{v.description}</div>
               )}
             </div>
-            {expandedId === v.id && v.description && (
-              <div style={styles.description}>{v.description}</div>
-            )}
             <button onClick={() => handleSelect(v.id)} style={styles.selectBtn}>
               Выбрать
             </button>
@@ -58,32 +62,52 @@ const styles = {
     borderRadius: '12px',
     padding: '16px',
     boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '12px',
   },
-  cardHeader: {
+  cardBody: {
+    cursor: 'pointer',
+  },
+  titleRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    cursor: 'pointer',
+    marginBottom: '8px',
   },
   highBadge: { color: '#ef4444', fontSize: '14px', fontWeight: 600 },
   lowBadge: { color: '#16a34a', fontSize: '14px', fontWeight: 600 },
-  thumb: { width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' as const },
+  imageWrapper: {
+    marginTop: '8px',
+    marginBottom: '8px',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+  },
+  image: {
+    maxWidth: '100%',
+    maxHeight: '200px',
+    objectFit: 'contain' as const,
+    borderRadius: '12px',
+  },
   description: {
-    marginTop: '12px',
-    padding: '8px',
+    marginTop: '8px',
+    padding: '12px',
     backgroundColor: '#f9fafb',
     borderRadius: '8px',
     fontSize: '14px',
     color: '#4b5563',
   },
   selectBtn: {
-    marginTop: '12px',
     background: '#16a34a',
     color: 'white',
     border: 'none',
-    padding: '8px 16px',
+    padding: '10px 16px',
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: 500,
+    alignSelf: 'stretch',
   },
 };

@@ -89,3 +89,30 @@ export interface Phenophase {
   order_index: number;
   created_at?: string;
 }
+
+export interface PhenophaseMatrixReportResponse {
+  variety_id: string;
+  columns: PhenophaseMatrixColumn[];
+  rows: PhenophaseMatrixRow[];
+}
+
+export interface PhenophaseMatrixColumn {
+  phenophase_id: string;
+  name: string;
+  order_index: number;
+}
+
+export interface PhenophaseMatrixRow {
+  question_id: string;
+  text: string;
+  order_index: number;
+  cells: PhenophaseMatrixCell[];
+}
+
+export interface PhenophaseMatrixCell {
+  phenophase_id: string;
+  answer_text: string | null;
+  result: string | null;
+  image_url: string | null;
+  report_id: string | null;
+}

@@ -29,9 +29,11 @@ export const AdminLayout = () => {
           <NavLink to="/dashboard" style={linkStyle}>📊 Отчёты</NavLink>
           <NavLink to="/questions" style={linkStyle}>❓ Вопросы</NavLink>
           <NavLink to="/admin/users/create" style={linkStyle}>👤 Пользователи</NavLink>
+          <NavLink to="/varieties" style={linkStyle}>🌱 Сорта</NavLink>
+          <NavLink to="/phenophases" style={linkStyle}>🌸 Фенофазы</NavLink>
+          <NavLink to="/phenophase-matrix" style={linkStyle}>📈 Матрица фенофаз</NavLink>
         </nav>
 
-        {/* Информация о пользователе – снизу слева */}
         <div style={styles.userBlock}>
           <div style={styles.userName}>{fullName || 'Пользователь'}</div>
           {position && <div style={styles.userPosition}>{position}</div>}

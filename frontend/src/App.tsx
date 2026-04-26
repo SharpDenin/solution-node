@@ -13,7 +13,10 @@ import { UserCreate } from './pages/UserCreate';
 import { VarietySelectPage } from './pages/VarietySelectPage';
 import { PhenophaseSelectPage } from './pages/PhenophaseSelectPage';
 import { ChecklistEntry } from './pages/ChecklistEntry';
+import { VarietyManagePage } from './pages/VarietyManagePage';
+import { PhenophaseManagePage } from './pages/PhenophaseManagePage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PhenophaseMatrixPage } from './pages/PhenophaseMatrixPage';
 
 const AppRoutes = () => {
   const { isLoading } = useAuth();
@@ -27,7 +30,6 @@ const AppRoutes = () => {
 
       {/* Чек-листы – доступны любому авторизованному */}
       <Route element={<ProtectedRoute><WorkerLayout /></ProtectedRoute>}>
-        {/* Диспетчер – сам решит, куда дальше */}
         <Route path="/checklist/:id" element={<ChecklistEntry />} />
         <Route path="/checklist/:id/variety" element={<VarietySelectPage />} />
         <Route path="/checklist/:id/phenophase" element={<PhenophaseSelectPage />} />
@@ -41,6 +43,9 @@ const AppRoutes = () => {
         <Route path="/reports/:id" element={<ReportDetail />} />
         <Route path="/questions" element={<Questions />} />
         <Route path="/admin/users/create" element={<UserCreate />} />
+        <Route path="/varieties" element={<VarietyManagePage />} />
+        <Route path="/phenophases" element={<PhenophaseManagePage />} />
+        <Route path="/phenophase-matrix" element={<PhenophaseMatrixPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

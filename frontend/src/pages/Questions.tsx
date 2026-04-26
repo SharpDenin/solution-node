@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { ImageUploader } from '../components/ImageUploader';
 import type { Question, Checklist, Phenophase, QuestionPhenophaseFormula } from '../types';
 
 export const Questions = () => {
@@ -10,19 +11,18 @@ export const Questions = () => {
 
   // поля для нового вопроса
   const [newText, setNewText] = useState('');
-  const [newOrder, setNewOrder] = useState(1);
-  const [newImageUrl, setNewImageUrl] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState<string | undefined>(undefined);
   const [newFormulaDefault, setNewFormulaDefault] = useState('');
   const [newFormulas, setNewFormulas] = useState<QuestionPhenophaseFormula[]>([]);
 
   // редактирование
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [editOrder, setEditOrder] = useState(0);
   const [editChecklistId, setEditChecklistId] = useState('');
-  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState<string | undefined>(undefined);
   const [editFormulaDefault, setEditFormulaDefault] = useState('');
   const [editFormulas, setEditFormulas] = useState<QuestionPhenophaseFormula[]>([]);
+  const [editOrder, setEditOrder] = useState(0); // не показываем, но храним для отправки
 
   const [loading, setLoading] = useState(false);
 
@@ -58,8 +58,7 @@ export const Questions = () => {
 
   const resetNewForm = () => {
     setNewText('');
-    setNewOrder(questions.length + 1);
-    setNewImageUrl('');
+    setNewImageUrl(undefined);
     setNewFormulaDefault('');
     if (activeChecklist?.code === 'sort_control') {
       setNewFormulas(phenophases.map(p => ({ phenophase_id: p.id, formula: '' })));
@@ -71,11 +70,31 @@ export const Questions = () => {
   const activeChecklist = checklists.find(c => c.id === activeChecklistId);
   const isSortControl = activeChecklist?.code === 'sort_control';
 
+  const uploadImage = async (file: File): Promise<string | undefined> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data.url;
+    } catch {
+      alert('Ошибка загрузки изображения');
+      return undefined;
+    }
+  };
+
+  const getMaxOrderIndex = (): number => {
+    if (questions.length === 0) return 1;
+    return Math.max(...questions.map(q => q.order_index)) + 1;
+  };
+
   const addQuestion = async () => {
     if (!newText.trim()) return;
+    const orderIndex = getMaxOrderIndex();
     const payload: any = {
       text: newText,
-      order_index: newOrder,
+      order_index: orderIndex,
       is_active: true,
       checklist_id: activeChecklistId,
       image_url: newImageUrl || undefined,
@@ -98,10 +117,10 @@ export const Questions = () => {
   const startEdit = (q: Question) => {
     setEditingId(q.id);
     setEditText(q.text);
-    setEditOrder(q.order_index);
     setEditChecklistId(q.checklist_id);
-    setEditImageUrl(q.image_url || '');
+    setEditImageUrl(q.image_url);
     setEditFormulaDefault(q.formula || '');
+    setEditOrder(q.order_index); // сохраняем текущий порядок
     if (isSortControl) {
       const existingFormulas = q.formulas || [];
       const merged = phenophases.map(p => {
@@ -120,7 +139,7 @@ export const Questions = () => {
   const updateQuestion = async (id: string) => {
     const payload: any = {
       text: editText,
-      order_index: editOrder,
+      order_index: editOrder, // сохраняем текущий порядок без изменений
       is_active: true,
       checklist_id: editChecklistId,
       image_url: editImageUrl || undefined,
@@ -170,7 +189,6 @@ export const Questions = () => {
         ))}
       </div>
 
-      {/* форма создания */}
       <div style={styles.newForm}>
         <h3>Новый вопрос для «{activeChecklist?.name || '...'}»</h3>
         <input
@@ -179,18 +197,13 @@ export const Questions = () => {
           placeholder="Текст вопроса"
           style={styles.input}
         />
-        <input
-          type="number"
-          value={newOrder}
-          onChange={e => setNewOrder(parseInt(e.target.value) || 0)}
-          placeholder="Порядок"
-          style={styles.inputSmall}
-        />
-        <input
-          value={newImageUrl}
-          onChange={e => setNewImageUrl(e.target.value)}
-          placeholder="URL картинки (необязательно)"
-          style={styles.input}
+        <ImageUploader
+          imageUrl={newImageUrl}
+          onUpload={async (file) => {
+            const url = await uploadImage(file);
+            if (url) setNewImageUrl(url);
+          }}
+          onRemove={() => setNewImageUrl(undefined)}
         />
 
         {!isSortControl ? (
@@ -241,12 +254,6 @@ export const Questions = () => {
           {editingId === q.id ? (
             <div style={{ flex: 1 }}>
               <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-              <input
-                type="number"
-                value={editOrder}
-                onChange={e => setEditOrder(parseInt(e.target.value) || 0)}
-                style={styles.inputSmall}
-              />
               <select
                 value={editChecklistId}
                 onChange={e => setEditChecklistId(e.target.value)}
@@ -256,11 +263,13 @@ export const Questions = () => {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <input
-                value={editImageUrl}
-                onChange={e => setEditImageUrl(e.target.value)}
-                placeholder="URL картинки"
-                style={styles.input}
+              <ImageUploader
+                imageUrl={editImageUrl}
+                onUpload={async (file) => {
+                  const url = await uploadImage(file);
+                  if (url) setEditImageUrl(url);
+                }}
+                onRemove={() => setEditImageUrl(undefined)}
               />
 
               {!isSortControl ? (
@@ -354,7 +363,6 @@ const styles = {
   },
   newForm: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 24 },
   input: { width: '100%', padding: 8, marginBottom: 8, borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' as const },
-  inputSmall: { width: 100, padding: 8, marginRight: 8, borderRadius: 6, border: '1px solid #ccc' },
   select: { padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', marginBottom: 8 },
   addBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
   item: { background: 'white', padding: 12, borderRadius: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 },

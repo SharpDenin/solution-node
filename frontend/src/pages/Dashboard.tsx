@@ -11,52 +11,74 @@ const getCurrentYearRange = () => {
   return { start, end };
 };
 
+const parseMetadata = (report: any) => {
+  if (typeof report.metadata === 'string') {
+    try {
+      report.metadata = JSON.parse(report.metadata);
+    } catch {
+      report.metadata = {};
+    }
+  }
+  return {
+    ...report,
+    place: report.place || report.metadata?.place || '',
+    sort: report.metadata?.sort || '',
+    priority_sort: report.metadata?.priority_sort || '',
+  };
+};
+
 export const Dashboard = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [activeChecklistId, setActiveChecklistId] = useState<string>('');
   const [filters, setFilters] = useState<ReportFilters>(() => {
     const { start, end } = getCurrentYearRange();
     return { date_from: start, date_to: end, user_name: '' };
   });
-  const [selectedChecklistId, setSelectedChecklistId] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/api/checklists').then(res => setChecklists(res.data));
+    api.get('/api/checklists').then(res => {
+      setChecklists(res.data);
+      if (res.data.length > 0 && !activeChecklistId) {
+        setActiveChecklistId(res.data[0].id);
+      }
+    });
   }, []);
 
   const fetchReports = async () => {
+    if (!activeChecklistId) return;
     setLoading(true);
+    setError(null);
     try {
-      const params: any = {};
+      const params: any = {
+        checklist_id: activeChecklistId,
+        limit: 1000,   // исправление
+        offset: 0,     // исправление
+      };
       if (filters.date_from) params.date_from = filters.date_from;
       if (filters.date_to) params.date_to = filters.date_to;
       if (filters.user_name) params.user_name = filters.user_name;
-      if (selectedChecklistId) params.checklist_id = selectedChecklistId;
 
-      if (selectedChecklistId) {
-        const cl = checklists.find(c => c.id === selectedChecklistId);
-        if (cl?.code === 'default' && filters.place) {
-          params['metadata_place'] = filters.place;
-        } else if (cl?.code === 'sort_control') {
-          if (filters.sort) params['metadata_sort'] = filters.sort;
-          if (filters.priority_sort) params['metadata_priority_sort'] = filters.priority_sort;
-        }
+      const cl = checklists.find(c => c.id === activeChecklistId);
+      if (cl?.code === 'default' && filters.place) {
+        params['metadata_place'] = filters.place;
+      } else if (cl?.code === 'sort_control') {
+        if (filters.sort) params['metadata_sort'] = filters.sort;
+        if (filters.priority_sort) params['metadata_priority_sort'] = filters.priority_sort;
       }
 
       const res = await api.get('/api/reports', { params });
       const raw = Array.isArray(res.data) ? res.data : [];
-      const parsed = raw.map((r: any) => ({
-        ...r,
-        place: r.metadata?.place || '',
-        sort: r.metadata?.sort || '',
-        priority_sort: r.metadata?.priority_sort || '',
-      }));
+      const parsed = raw.map(parseMetadata);
       setReports(parsed);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Ошибка загрузки отчётов', err);
+      const message = err?.response?.data || 'Не удалось загрузить отчёты';
+      setError(typeof message === 'string' ? message : 'Ошибка сервера');
       setReports([]);
     } finally {
       setLoading(false);
@@ -65,24 +87,28 @@ export const Dashboard = () => {
 
   useEffect(() => {
     fetchReports();
-  }, [filters, selectedChecklistId, checklists]);
+  }, [filters, activeChecklistId, checklists]);
 
   const handleFilterChange = (key: keyof ReportFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value || undefined }));
   };
 
-  const handleChecklistChange = (id: string) => {
-    setSelectedChecklistId(id);
-    setFilters(prev => ({ ...prev, place: '', sort: '', priority_sort: '' }));
+  const switchTab = (checklistId: string) => {
+    setActiveChecklistId(checklistId);
+    setFilters(prev => ({
+      ...prev,
+      place: '',
+      sort: '',
+      priority_sort: '',
+    }));
   };
 
   const resetFilters = () => {
     const { start, end } = getCurrentYearRange();
     setFilters({ date_from: start, date_to: end, user_name: '' });
-    setSelectedChecklistId('');
   };
 
-  const selectedChecklist = checklists.find(c => c.id === selectedChecklistId);
+  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
 
   return (
     <div>
@@ -93,19 +119,22 @@ export const Dashboard = () => {
         </button>
       </div>
 
-      <div style={styles.filters}>
-        <label>Тип чек-листа:</label>
-        <select
-          value={selectedChecklistId}
-          onChange={e => handleChecklistChange(e.target.value)}
-          style={styles.filterInput}
-        >
-          <option value="">Все</option>
-          {checklists.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+      <div style={styles.tabs}>
+        {checklists.map(cl => (
+          <button
+            key={cl.id}
+            onClick={() => switchTab(cl.id)}
+            style={{
+              ...styles.tabButton,
+              ...(activeChecklistId === cl.id ? styles.activeTab : {}),
+            }}
+          >
+            {cl.name}
+          </button>
+        ))}
+      </div>
 
+      <div style={styles.filters}>
         <label>Дата с:</label>
         <input
           type="date"
@@ -129,7 +158,7 @@ export const Dashboard = () => {
           style={styles.filterInput}
         />
 
-        {selectedChecklist && selectedChecklist.code === 'default' && (
+        {activeChecklist?.code === 'default' && (
           <>
             <label>Место:</label>
             <input
@@ -141,7 +170,7 @@ export const Dashboard = () => {
             />
           </>
         )}
-        {selectedChecklist && selectedChecklist.code === 'sort_control' && (
+        {activeChecklist?.code === 'sort_control' && (
           <>
             <label>Сорт:</label>
             <input
@@ -166,6 +195,7 @@ export const Dashboard = () => {
         <button onClick={resetFilters} style={styles.resetBtn}>Сбросить</button>
       </div>
 
+      {error && <div style={styles.error}>{error}</div>}
       {loading && <p>Загрузка...</p>}
 
       <div style={styles.list}>
@@ -195,7 +225,7 @@ export const Dashboard = () => {
             </div>
           );
         })}
-        {!loading && reports.length === 0 && (
+        {!loading && !error && reports.length === 0 && (
           <p style={styles.noData}>Отчёты не найдены.</p>
         )}
       </div>
@@ -203,7 +233,7 @@ export const Dashboard = () => {
       {showExportModal && (
         <ExportModal
           onClose={() => setShowExportModal(false)}
-          initialFilters={{ ...filters, checklist_id: selectedChecklistId }}
+          initialFilters={{ ...filters, checklist_id: activeChecklistId }}
           checklists={checklists}
         />
       )}
@@ -214,6 +244,29 @@ export const Dashboard = () => {
 const styles = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   exportBtn: { background: '#2563eb', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
+  tabs: {
+    display: 'flex',
+    gap: 0,
+    marginBottom: 24,
+    borderBottom: '2px solid #e5e7eb',
+  },
+  tabButton: {
+    padding: '10px 20px',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    marginBottom: '-2px',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500,
+    color: '#6b7280',
+    transition: 'all 0.2s',
+    outline: 'none',
+  },
+  activeTab: {
+    color: '#16a34a',
+    borderBottom: '2px solid #16a34a',
+  },
   filters: { display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' as const, alignItems: 'center' },
   filterInput: { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 },
   resetBtn: { background: '#6b7280', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
@@ -222,4 +275,5 @@ const styles = {
   cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 },
   cardFooter: { marginTop: 8, fontSize: 12, color: '#6b7280' },
   noData: { textAlign: 'center' as const, padding: 20, color: '#6b7280' },
+  error: { background: '#fee2e2', color: '#b91c1c', padding: '12px', borderRadius: 8, marginBottom: 16 },
 };

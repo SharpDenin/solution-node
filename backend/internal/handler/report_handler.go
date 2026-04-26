@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -274,6 +275,8 @@ func parseReportFilters(r *http.Request) repository.ReportFilters {
 
 	filters := repository.ReportFilters{
 		MetadataFilters: make(map[string]string),
+		Limit:           1000,
+		Offset:          0,
 	}
 
 	if v := query.Get("date_from"); v != "" {
@@ -302,6 +305,17 @@ func parseReportFilters(r *http.Request) repository.ReportFilters {
 
 	if v := query.Get("phenophase_id"); v != "" {
 		filters.PhenophaseID = &v
+	}
+	
+	if v := query.Get("limit"); v != "" {
+		if l, err := strconv.Atoi(v); err == nil && l > 0 {
+			filters.Limit = l
+		}
+	}
+	if v := query.Get("offset"); v != "" {
+		if o, err := strconv.Atoi(v); err == nil && o >= 0 {
+			filters.Offset = o
+		}
 	}
 
 	for key, values := range query {

@@ -11,12 +11,10 @@ const linkStyle = ({ isActive }: { isActive: boolean }) => ({
 });
 
 export const AdminLayout = () => {
-  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    navigate('/');  // уходим на главную, токен cбросится там
   };
 
   return (

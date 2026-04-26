@@ -21,32 +21,33 @@ export const ChecklistReport = () => {
   useEffect(() => {
     if (!id) return;
 
+    // 1. Проверяем доступ и получаем список доступных чек-листов
     api.get('/api/checklists/available')
       .then(res => {
-        const accessibleIds = (res.data as Checklist[]).map(c => c.id);
-        if (!accessibleIds.includes(id)) {
+        const accessible = res.data as Checklist[];
+        const foundChecklist = accessible.find(c => c.id === id);
+
+        if (!foundChecklist) {
           alert('У вас нет доступа к этому чек-листу');
           navigate('/');
           return;
         }
-        // Загружаем инфо о чек-листе и вопросы
-        return Promise.all([
-          api.get(`/api/checklists/${id}`),
-          api.get(`/api/checklists/${id}/questions`)
-        ]);
-      })
-      .then((results) => {
-        if (!results) return;
-        const [clRes, qRes] = results;
-        setChecklist(clRes.data);
-        const sorted = (qRes.data as Question[])
-          .filter(q => q.is_active)
-          .sort((a, b) => a.order_index - b.order_index);
-        setQuestions(sorted);
+
+        // Чек-лист найден — сохраняем его и загружаем вопросы
+        setChecklist(foundChecklist);
+
+        // 2. Загружаем вопросы для найденного чек-листа
+        return api.get(`/api/checklists/${id}/questions`).then(qRes => {
+          const sorted = (qRes.data as Question[])
+            .filter(q => q.is_active)
+            .sort((a, b) => a.order_index - b.order_index);
+          setQuestions(sorted);
+        });
       })
       .catch(err => {
-        console.error(err);
-        navigate('/');
+        console.error('Ошибка при загрузке данных чек-листа', err);
+        // Если запрос available упал (например, 401) — вернём на логин
+        navigate('/login?returnUrl=/checklist/' + id);
       })
       .finally(() => setCheckingAccess(false));
   }, [id, navigate]);
@@ -200,7 +201,7 @@ export const ChecklistReport = () => {
   );
 };
 
-// ---- QuestionCard ----
+// ------------- QuestionCard (без изменений) ---------------
 interface QuestionCardProps {
   question: Question;
   answer?: AnswerPayload;
@@ -238,6 +239,11 @@ const QuestionCard = ({
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onImageUpload(file);
+  };
+
   return (
     <div style={styles.questionCard}>
       <b>{question.text}</b>
@@ -262,10 +268,7 @@ const QuestionCard = ({
         <input
           type="file"
           accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onImageUpload(file);
-          }}
+          onChange={handleFileSelect}
           style={{ display: 'none' }}
           id={`file-${question.id}`}
         />
@@ -285,12 +288,31 @@ const QuestionCard = ({
   );
 };
 
-// ---- Стили ----
+// ------------- Стили -------------
 const styles: Record<string, CSSProperties> = {
   formGroup: { marginBottom: 24 },
-  input: { width: '100%', padding: '10px', marginBottom: 12, borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' },
-  questionCard: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 16 },
-  textarea: { width: '100%', marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid #ccc', boxSizing: 'border-box' },
+  input: {
+    width: '100%',
+    padding: '10px',
+    marginBottom: 12,
+    borderRadius: 8,
+    border: '1px solid #ccc',
+    boxSizing: 'border-box',
+  },
+  questionCard: {
+    background: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  textarea: {
+    width: '100%',
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 8,
+    border: '1px solid #ccc',
+    boxSizing: 'border-box',
+  },
   dropZone: {
     marginTop: 12,
     border: '2px dashed #ccc',
@@ -309,7 +331,12 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 8,
     display: 'inline-block',
   },
-  image: { maxWidth: 200, maxHeight: 150, borderRadius: 8, display: 'block' },
+  image: {
+    maxWidth: 200,
+    maxHeight: 150,
+    borderRadius: 8,
+    display: 'block',
+  },
   removeImage: {
     position: 'absolute' as const,
     top: -8,
@@ -326,5 +353,14 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitBtn: { background: '#16a34a', color: 'white', border: 'none', padding: '12px', borderRadius: 8, cursor: 'pointer', width: '100%', marginTop: 16 },
+  submitBtn: {
+    background: '#16a34a',
+    color: 'white',
+    border: 'none',
+    padding: '12px',
+    borderRadius: 8,
+    cursor: 'pointer',
+    width: '100%',
+    marginTop: 16,
+  },
 };

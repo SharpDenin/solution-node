@@ -6,8 +6,13 @@ import type { Checklist } from '../types';
 
 export const HomePage = () => {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
-  const { token, role } = useAuth();
+  const { token, logout } = useAuth();
   const navigate = useNavigate();
+
+  // При заходе на главную сбрасываем токен — чистая публичная страница
+  useEffect(() => {
+    logout();
+  }, [logout]);
 
   useEffect(() => {
     api.get('/api/checklists')
@@ -16,6 +21,7 @@ export const HomePage = () => {
   }, []);
 
   const handleChecklistClick = (id: string) => {
+    // Токена нет – всегда редирект на логин
     if (!token) {
       navigate(`/login?returnUrl=/checklist/${id}`);
     } else {
@@ -24,83 +30,95 @@ export const HomePage = () => {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.page}>
+      {/* Шапка с названием компании — слева сверху */}
       <div style={styles.header}>
-        <h1>Доступные чек-листы</h1>
-        <div style={styles.buttons}>
-          {!token && (
-            <button onClick={() => navigate('/login')} style={styles.loginBtn}>Войти</button>
-          )}
-          {role === 'admin' && (
-            <button onClick={() => navigate('/dashboard')} style={styles.reportsBtn}>
-              Отчёты
-            </button>
-          )}
-        </div>
+        <div style={styles.companyName}>ООО "Агроном-сад"</div>
       </div>
-      <div style={styles.list}>
-        {checklists.map(cl => (
-          <div
-            key={cl.id}
-            style={styles.card}
-            onClick={() => handleChecklistClick(cl.id)}
-          >
-            <strong>{cl.name}</strong>
-            <div style={styles.code}>{cl.code}</div>
-          </div>
-        ))}
+
+      {/* Основной контент — по центру */}
+      <div style={styles.content}>
+        <h1 style={styles.title}>Выберите необходимый функционал:</h1>
+
+        <div style={styles.checklistPanel}>
+          {checklists.map(cl => (
+            <div
+              key={cl.id}
+              style={styles.card}
+              onClick={() => handleChecklistClick(cl.id)}
+            >
+              <strong>{cl.name}</strong>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={styles.reportsBtn}
+        >
+          Отчёты
+        </button>
       </div>
     </div>
   );
 };
 
 const styles = {
-  container: {
-    maxWidth: '600px',
-    margin: '40px auto',
-    padding: '0 16px',
+  page: {
+    minHeight: '100vh',
+    background: '#f4f6f8', // фон всей страницы
   },
   header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    width: '100%',
+    padding: '20px 24px',
+    boxSizing: 'border-box' as const,
   },
-  buttons: {
-    display: 'flex',
-    gap: '12px',
+  companyName: {
+    fontSize: '18px',
+    fontWeight: 700 as const,
+    color: '#111827',
+    textAlign: 'left' as const,
   },
-  loginBtn: {
-    background: '#2563eb',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '8px',
+  content: {
+    maxWidth: '600px',
+    margin: '0 auto',
+    padding: '0 16px 40px',
+    textAlign: 'center' as const,
+  },
+  title: {
+    marginBottom: '36px',
+    fontSize: '24px',
+    fontWeight: 600 as const,
+    color: '#111827',
+  },
+  checklistPanel: {
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '16px',
+    padding: '20px',
+    marginBottom: '32px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '16px',
+  },
+  card: {
+    background: 'white',
+    padding: '18px 16px',
+    borderRadius: '12px',
     cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+    transition: 'box-shadow 0.2s',
+    textAlign: 'left' as const,
+    fontSize: '16px',
   },
   reportsBtn: {
     background: '#16a34a',
     color: 'white',
     border: 'none',
-    padding: '8px 16px',
+    padding: '12px 24px',
     borderRadius: '8px',
+    fontSize: '16px',
     cursor: 'pointer',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '12px',
-    marginTop: '24px',
-  },
-  card: {
-    background: 'white',
-    padding: '16px',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-    transition: 'box-shadow 0.2s',
-  },
-  code: {
-    color: '#6b7280',
-    fontSize: '14px',
+    marginTop: '8px',
   },
 };

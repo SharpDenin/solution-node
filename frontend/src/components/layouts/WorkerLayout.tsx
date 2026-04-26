@@ -10,7 +10,7 @@ export const WorkerLayout = () => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <span style={styles.logo}>📋 Растворные узлы</span>
+        <span style={styles.logo}>📋 Чек-лист работника</span>
         <button onClick={handleLogout} style={styles.logoutBtn}>Выход</button>
       </header>
       <main style={styles.main}>

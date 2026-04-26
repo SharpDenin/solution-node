@@ -1,15 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 export const ThankYou = () => {
-  const { logout } = useAuth();
   const navigate = useNavigate();
-
   const handleExit = () => {
-    logout();
     navigate('/');
   };
-
+  
   return (
     <div style={styles.container}>
       <div style={styles.card}>

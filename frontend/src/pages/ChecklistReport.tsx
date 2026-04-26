@@ -14,39 +14,35 @@ export const ChecklistReport = () => {
   const [responsible, setResponsible] = useState('');
   const [place, setPlace] = useState('');
   const [sort, setSort] = useState('');
-  const [prioritySort, setPrioritySort] = useState('low');
+  const [prioritySort, setPrioritySort] = useState('low'); // low / high
   const [loading, setLoading] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
 
   useEffect(() => {
     if (!id) return;
 
-    // 1. Проверяем доступ и получаем список доступных чек-листов
+    // Проверяем доступ через /api/checklists/available
     api.get('/api/checklists/available')
       .then(res => {
         const accessible = res.data as Checklist[];
-        const foundChecklist = accessible.find(c => c.id === id);
-
-        if (!foundChecklist) {
+        const found = accessible.find(c => c.id === id);
+        if (!found) {
           alert('У вас нет доступа к этому чек-листу');
           navigate('/');
           return;
         }
-
-        // Чек-лист найден — сохраняем его и загружаем вопросы
-        setChecklist(foundChecklist);
-
-        // 2. Загружаем вопросы для найденного чек-листа
-        return api.get(`/api/checklists/${id}/questions`).then(qRes => {
-          const sorted = (qRes.data as Question[])
-            .filter(q => q.is_active)
-            .sort((a, b) => a.order_index - b.order_index);
-          setQuestions(sorted);
-        });
+        setChecklist(found);
+        return api.get(`/api/checklists/${id}/questions`);
+      })
+      .then(qRes => {
+        if (!qRes) return;
+        const sorted = (qRes.data as Question[])
+          .filter(q => q.is_active)
+          .sort((a, b) => a.order_index - b.order_index);
+        setQuestions(sorted);
       })
       .catch(err => {
-        console.error('Ошибка при загрузке данных чек-листа', err);
-        // Если запрос available упал (например, 401) — вернём на логин
+        console.error('Ошибка загрузки данных чек-листа', err);
         navigate('/login?returnUrl=/checklist/' + id);
       })
       .finally(() => setCheckingAccess(false));
@@ -110,12 +106,14 @@ export const ChecklistReport = () => {
       })),
     };
 
-    if (checklist?.code === 'sort_priority') {
+    // Дополнительные поля в зависимости от типа чек-листа
+    if (checklist?.code === 'sort_control') {
       payload.sort = sort;
       payload.priority_sort = prioritySort;
-    } else {
+    } else if (checklist?.code === 'default') {
       payload.place = place || 'Не указано';
     }
+    // При появлении новых типов добавляем сюда условия
 
     setLoading(true);
     try {
@@ -150,7 +148,19 @@ export const ChecklistReport = () => {
           style={styles.input}
         />
 
-        {checklist.code === 'sort_priority' ? (
+        {/* Динамические поля в зависимости от кода чек-листа */}
+        {checklist.code === 'default' && (
+          <>
+            <label>Место работ</label>
+            <input
+              placeholder="Например: Растворный узел №1"
+              value={place}
+              onChange={e => setPlace(e.target.value)}
+              style={styles.input}
+            />
+          </>
+        )}
+        {checklist.code === 'sort_control' && (
           <>
             <label>Сорт</label>
             <input
@@ -167,16 +177,6 @@ export const ChecklistReport = () => {
               <option value="low">Низкий</option>
               <option value="high">Высокий</option>
             </select>
-          </>
-        ) : (
-          <>
-            <label>Место работ</label>
-            <input
-              placeholder="Например: Растворный узел №1"
-              value={place}
-              onChange={e => setPlace(e.target.value)}
-              style={styles.input}
-            />
           </>
         )}
       </div>
@@ -201,7 +201,7 @@ export const ChecklistReport = () => {
   );
 };
 
-// ------------- QuestionCard (без изменений) ---------------
+// ---------- QuestionCard (без изменений) ----------
 interface QuestionCardProps {
   question: Question;
   answer?: AnswerPayload;

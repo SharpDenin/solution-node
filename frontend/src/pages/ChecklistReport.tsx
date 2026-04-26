@@ -99,6 +99,7 @@ export const ChecklistReport = () => {
       checklist_id: id,
       report_date: date,
       responsible_name: responsible,
+      metadata: {},                          // ← теперь metadata всегда объект
       answers: Object.values(answers).map(a => ({
         question_id: a.question_id,
         answer_text: a.answer_text,
@@ -106,14 +107,16 @@ export const ChecklistReport = () => {
       })),
     };
 
-    // Дополнительные поля в зависимости от типа чек-листа
     if (checklist?.code === 'sort_control') {
-      payload.sort = sort;
-      payload.priority_sort = prioritySort;
+      payload.metadata = {
+        sort: sort,
+        priority_sort: prioritySort,
+      };
     } else if (checklist?.code === 'default') {
-      payload.place = place || 'Не указано';
+      payload.metadata = {
+        place: place || 'Не указано',
+      };
     }
-    // При появлении новых типов добавляем сюда условия
 
     setLoading(true);
     try {

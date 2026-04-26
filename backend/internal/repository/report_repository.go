@@ -121,36 +121,38 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 		args = append(args, *f.DateFrom)
 		argID++
 	}
-
 	if f.DateTo != nil {
 		query += " AND r.report_date <= $" + fmt.Sprint(argID)
 		args = append(args, *f.DateTo)
 		argID++
 	}
-
 	if f.ChecklistID != nil {
 		query += " AND r.checklist_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.ChecklistID)
 		argID++
 	}
-
 	if f.UserID != nil {
 		query += " AND r.user_id = $" + fmt.Sprint(argID)
 		args = append(args, *f.UserID)
 		argID++
 	}
-
 	if f.UserName != nil {
 		query += " AND u.full_name ILIKE $" + fmt.Sprint(argID)
 		args = append(args, "%"+*f.UserName+"%")
 		argID++
 	}
 
+	// ===== ВОТ ЭТО НАДО ДОБАВИТЬ =====
+	for key, value := range f.MetadataFilters {
+		query += fmt.Sprintf(" AND r.metadata->>$%d ILIKE $%d", argID, argID+1)
+		args = append(args, key, "%"+value+"%")
+		argID += 2
+	}
+
 	query += " ORDER BY r.report_date DESC"
 	query += " LIMIT $" + fmt.Sprint(argID)
 	args = append(args, f.Limit)
 	argID++
-
 	query += " OFFSET $" + fmt.Sprint(argID)
 	args = append(args, f.Offset)
 
@@ -161,26 +163,14 @@ func (r *reportRepository) GetReports(ctx context.Context, f ReportFilters) ([]d
 	defer rows.Close()
 
 	var reports []dtos.ReportResponse
-
 	for rows.Next() {
 		var r dtos.ReportResponse
-
-		err := rows.Scan(
-			&r.ID,
-			&r.UserID,
-			&r.ChecklistID,
-			&r.ReportDate,
-			&r.ResponsibleName,
-			&r.Metadata,
-			&r.CreatedAt,
-		)
+		err := rows.Scan(&r.ID, &r.UserID, &r.ChecklistID, &r.ReportDate, &r.ResponsibleName, &r.Metadata, &r.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
-
 		reports = append(reports, r)
 	}
-
 	return reports, nil
 }
 

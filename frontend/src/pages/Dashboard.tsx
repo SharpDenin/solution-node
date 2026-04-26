@@ -37,17 +37,24 @@ export const Dashboard = () => {
       if (selectedChecklistId) params.checklist_id = selectedChecklistId;
 
       if (selectedChecklistId) {
-        const selectedCl = checklists.find(c => c.id === selectedChecklistId);
-        if (selectedCl?.code === 'default' && filters.place) {
-          params.place = filters.place;
-        } else if (selectedCl?.code === 'sort_priority') {
-          if (filters.sort) params.sort = filters.sort;
-          if (filters.priority_sort) params.priority_sort = filters.priority_sort;
+        const cl = checklists.find(c => c.id === selectedChecklistId);
+        if (cl?.code === 'default' && filters.place) {
+          params['metadata_place'] = filters.place;
+        } else if (cl?.code === 'sort_control') {
+          if (filters.sort) params['metadata_sort'] = filters.sort;
+          if (filters.priority_sort) params['metadata_priority_sort'] = filters.priority_sort;
         }
       }
 
       const res = await api.get('/api/reports', { params });
-      setReports(Array.isArray(res.data) ? res.data : []);
+      const raw = Array.isArray(res.data) ? res.data : [];
+      const parsed = raw.map((r: any) => ({
+        ...r,
+        place: r.metadata?.place || '',
+        sort: r.metadata?.sort || '',
+        priority_sort: r.metadata?.priority_sort || '',
+      }));
+      setReports(parsed);
     } catch (err) {
       console.error('Ошибка загрузки отчётов', err);
       setReports([]);
@@ -58,7 +65,7 @@ export const Dashboard = () => {
 
   useEffect(() => {
     fetchReports();
-  }, [filters, selectedChecklistId]);
+  }, [filters, selectedChecklistId, checklists]);
 
   const handleFilterChange = (key: keyof ReportFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value || undefined }));
@@ -66,7 +73,6 @@ export const Dashboard = () => {
 
   const handleChecklistChange = (id: string) => {
     setSelectedChecklistId(id);
-    // Сброс специфичных фильтров
     setFilters(prev => ({ ...prev, place: '', sort: '', priority_sort: '' }));
   };
 
@@ -100,7 +106,6 @@ export const Dashboard = () => {
           ))}
         </select>
 
-        {/* Общие фильтры (всегда видны) */}
         <label>Дата с:</label>
         <input
           type="date"
@@ -124,7 +129,6 @@ export const Dashboard = () => {
           style={styles.filterInput}
         />
 
-        {/* Специфичные фильтры – появляются только при выборе типа */}
         {selectedChecklist && selectedChecklist.code === 'default' && (
           <>
             <label>Место:</label>
@@ -137,7 +141,7 @@ export const Dashboard = () => {
             />
           </>
         )}
-        {selectedChecklist && selectedChecklist.code === 'sort_priority' && (
+        {selectedChecklist && selectedChecklist.code === 'sort_control' && (
           <>
             <label>Сорт:</label>
             <input
@@ -165,24 +169,32 @@ export const Dashboard = () => {
       {loading && <p>Загрузка...</p>}
 
       <div style={styles.list}>
-        {reports.map(report => (
-          <div
-            key={report.id}
-            style={styles.card}
-            onClick={() => navigate(`/reports/${report.id}`)}
-          >
-            <div style={styles.cardHeader}>
-              <strong>
-                {report.place || report.sort || 'Без названия'}
-              </strong>
-              <span>{new Date(report.report_date).toLocaleDateString('ru-RU')}</span>
+        {reports.map(report => {
+          const title = report.sort
+            ? `Сорт: ${report.sort}`
+            : report.place || 'Без названия';
+          const priorityColor =
+            report.priority_sort === 'high' ? '#ef4444' :
+            report.priority_sort === 'low' ? '#16a34a' :
+            'inherit';
+
+          return (
+            <div
+              key={report.id}
+              style={styles.card}
+              onClick={() => navigate(`/reports/${report.id}`)}
+            >
+              <div style={styles.cardHeader}>
+                <strong style={{ color: priorityColor }}>{title}</strong>
+                <span>{new Date(report.report_date).toLocaleDateString('ru-RU')}</span>
+              </div>
+              <div>Ответственный: {report.responsible_name}</div>
+              <div style={styles.cardFooter}>
+                Создан: {new Date(report.created_at).toLocaleDateString('ru-RU')}
+              </div>
             </div>
-            <div>Ответственный: {report.responsible_name}</div>
-            <div style={styles.cardFooter}>
-              Создан: {new Date(report.created_at).toLocaleDateString('ru-RU')}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {!loading && reports.length === 0 && (
           <p style={styles.noData}>Отчёты не найдены.</p>
         )}

@@ -3,8 +3,8 @@ export type UserRole = 'admin' | 'worker';
 export interface Checklist {
   id: string;
   name: string;
-  code: string;             // 'default' | 'sort_priority' ...
-  allowed_role_id: string;  // UUID роли, которой разрешён доступ
+  code: string;             // 'default' | 'sort_control' ...
+  allowed_role_id?: string;
 }
 
 export interface Question {
@@ -19,6 +19,7 @@ export interface Question {
 export interface AnswerPayload {
   question_id: string;
   answer_text: string;
+  result?: 'good' | 'neutral' | 'bad';
   image_url?: string;
 }
 
@@ -28,7 +29,9 @@ export interface Report {
   checklist_id: string;
   report_date: string;
   responsible_name: string;
+  metadata?: string;        // JSON-строка с дополнительными данными
   created_at: string;
+  // поля, извлечённые из metadata (заполняются после парсинга)
   place?: string;
   sort?: string;
   priority_sort?: string;
@@ -40,8 +43,12 @@ export interface ReportDetail extends Report {
     question_text: string;
     answer_text: string;
     image_url?: string;
-    evaluation?: 'good' | 'bad' | null;
+    result?: 'good' | 'neutral' | 'bad';
   }>;
+  metadata?: string;
+  place?: string;
+  sort?: string;
+  priority_sort?: string;
 }
 
 export interface ReportFilters {

@@ -22,10 +22,13 @@ export const ExportModal: React.FC<Props> = ({ onClose, initialFilters, checklis
       if (filters.date_to) params.date_to = filters.date_to;
       if (filters.user_name) params.user_name = filters.user_name;
       if (filters.checklist_id) params.checklist_id = filters.checklist_id;
-      if (selectedChecklist?.code === 'default' && filters.place) params.place = filters.place;
-      if (selectedChecklist?.code === 'sort_priority') {
-        if (filters.sort) params.sort = filters.sort;
-        if (filters.priority_sort) params.priority_sort = filters.priority_sort;
+
+      // Метаданные-фильтры
+      if (selectedChecklist?.code === 'default' && filters.place) {
+        params['metadata_place'] = filters.place;
+      } else if (selectedChecklist?.code === 'sort_control') {
+        if (filters.sort) params['metadata_sort'] = filters.sort;
+        if (filters.priority_sort) params['metadata_priority_sort'] = filters.priority_sort;
       }
 
       const response = await api.get('/api/reports/export', {
@@ -42,8 +45,27 @@ export const ExportModal: React.FC<Props> = ({ onClose, initialFilters, checklis
       link.remove();
       window.URL.revokeObjectURL(url);
       onClose();
-    } catch (err) {
-      alert('Ошибка при выгрузке отчёта');
+    } catch (err: any) {
+      let message = 'Ошибка при выгрузке отчёта';
+
+      // Если сервер ответил 404 – значит, нет данных
+      if (err.response?.status === 404) {
+        message = 'Нет отчётов по заданным фильтрам';
+      } else if (err.response?.data) {
+        // Пробуем извлечь текстовое сообщение из ответа
+        try {
+          if (typeof err.response.data === 'string') {
+            message = err.response.data;
+          } else if (err.response.data instanceof Blob) {
+            const text = await err.response.data.text();
+            if (text) message = text;
+          }
+        } catch (e) {
+          // останется дефолтное сообщение
+        }
+      }
+
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -51,14 +73,22 @@ export const ExportModal: React.FC<Props> = ({ onClose, initialFilters, checklis
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={styles.modal} onClick={e => e.stopPropagation()}>
         <h3 style={styles.title}>Выгрузка отчётов</h3>
 
         <div style={styles.field}>
           <label style={styles.label}>Тип чек-листа</label>
           <select
             value={filters.checklist_id || ''}
-            onChange={(e) => setFilters(prev => ({ ...prev, checklist_id: e.target.value || undefined, place: '', sort: '', priority_sort: '' }))}
+            onChange={e =>
+              setFilters(prev => ({
+                ...prev,
+                checklist_id: e.target.value || undefined,
+                place: '',
+                sort: '',
+                priority_sort: ''
+              }))
+            }
             style={styles.input}
           >
             <option value="">Все</option>
@@ -70,32 +100,32 @@ export const ExportModal: React.FC<Props> = ({ onClose, initialFilters, checklis
 
         <div style={styles.field}>
           <label style={styles.label}>Дата от</label>
-          <input type="date" value={filters.date_from || ''} onChange={(e) => setFilters(prev => ({ ...prev, date_from: e.target.value }))} style={styles.input} />
+          <input type="date" value={filters.date_from || ''} onChange={e => setFilters(prev => ({ ...prev, date_from: e.target.value }))} style={styles.input} />
         </div>
         <div style={styles.field}>
           <label style={styles.label}>Дата до</label>
-          <input type="date" value={filters.date_to || ''} onChange={(e) => setFilters(prev => ({ ...prev, date_to: e.target.value }))} style={styles.input} />
+          <input type="date" value={filters.date_to || ''} onChange={e => setFilters(prev => ({ ...prev, date_to: e.target.value }))} style={styles.input} />
         </div>
         <div style={styles.field}>
           <label style={styles.label}>Ответственный (ФИО)</label>
-          <input type="text" placeholder="Введите часть ФИО" value={filters.user_name || ''} onChange={(e) => setFilters(prev => ({ ...prev, user_name: e.target.value }))} style={styles.input} />
+          <input type="text" placeholder="Введите часть ФИО" value={filters.user_name || ''} onChange={e => setFilters(prev => ({ ...prev, user_name: e.target.value }))} style={styles.input} />
         </div>
 
         {selectedChecklist?.code === 'default' && (
           <div style={styles.field}>
             <label style={styles.label}>Место работ</label>
-            <input type="text" placeholder="Например: Растворный узел" value={filters.place || ''} onChange={(e) => setFilters(prev => ({ ...prev, place: e.target.value }))} style={styles.input} />
+            <input type="text" placeholder="Например: Растворный узел" value={filters.place || ''} onChange={e => setFilters(prev => ({ ...prev, place: e.target.value }))} style={styles.input} />
           </div>
         )}
-        {selectedChecklist?.code === 'sort_priority' && (
+        {selectedChecklist?.code === 'sort_control' && (
           <>
             <div style={styles.field}>
               <label style={styles.label}>Сорт</label>
-              <input type="text" placeholder="Сорт" value={filters.sort || ''} onChange={(e) => setFilters(prev => ({ ...prev, sort: e.target.value }))} style={styles.input} />
+              <input type="text" placeholder="Сорт" value={filters.sort || ''} onChange={e => setFilters(prev => ({ ...prev, sort: e.target.value }))} style={styles.input} />
             </div>
             <div style={styles.field}>
               <label style={styles.label}>Приоритет</label>
-              <select value={filters.priority_sort || ''} onChange={(e) => setFilters(prev => ({ ...prev, priority_sort: e.target.value }))} style={styles.input}>
+              <select value={filters.priority_sort || ''} onChange={e => setFilters(prev => ({ ...prev, priority_sort: e.target.value }))} style={styles.input}>
                 <option value="">Все</option>
                 <option value="high">Высокий</option>
                 <option value="low">Низкий</option>

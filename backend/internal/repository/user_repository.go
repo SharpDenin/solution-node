@@ -5,10 +5,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgconn"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type UserRepository interface {
@@ -27,9 +26,11 @@ func NewUserRepository(db *DB) UserRepository {
 
 func (r *userRepository) Create(ctx context.Context, user *models.User, roleName string) error {
 	query := `
-		INSERT INTO users (full_name, login, password_hash, role_id)
-		VALUES ($1, $2, $3, (SELECT id FROM roles WHERE name = $4))
-		RETURNING id, created_at
+		INSERT INTO users (full_name, login, password_hash, role_id, position)
+		SELECT $1, $2, $3, roles.id, $5
+		FROM roles
+		WHERE roles.name = $4
+		RETURNING id, role_id, created_at
 	`
 
 	err := r.db.Pool.QueryRow(ctx, query,
@@ -37,7 +38,8 @@ func (r *userRepository) Create(ctx context.Context, user *models.User, roleName
 		user.Login,
 		user.PasswordHash,
 		roleName,
-	).Scan(&user.ID, &user.CreatedAt)
+		user.Position,
+	).Scan(&user.ID, &user.RoleID, &user.CreatedAt)
 
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok {
@@ -45,6 +47,11 @@ func (r *userRepository) Create(ctx context.Context, user *models.User, roleName
 				return errors.New("user already exists")
 			}
 		}
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("invalid role")
+		}
+
 		return err
 	}
 
@@ -59,6 +66,7 @@ func (r *userRepository) GetByLogin(ctx context.Context, login string) (*models.
 			u.login,
 			u.password_hash,
 			u.role_id,
+			u.position,
 			u.created_at,
 			r.name
 		FROM users u
@@ -75,6 +83,7 @@ func (r *userRepository) GetByLogin(ctx context.Context, login string) (*models.
 		&user.Login,
 		&user.PasswordHash,
 		&user.RoleID,
+		&user.Position,
 		&user.CreatedAt,
 		&roleName,
 	)
@@ -97,6 +106,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 			u.login,
 			u.password_hash,
 			u.role_id,
+			u.position,
 			u.created_at,
 			r.name
 		FROM users u
@@ -113,6 +123,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Use
 		&user.Login,
 		&user.PasswordHash,
 		&user.RoleID,
+		&user.Position,
 		&user.CreatedAt,
 		&roleName,
 	)

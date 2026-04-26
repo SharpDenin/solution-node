@@ -1,7 +1,6 @@
 package main
 
 import (
-	"backend/internal/service/checklist_service"
 	"context"
 	"log"
 	"net/http"
@@ -17,8 +16,11 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/service/auth_service"
+	"backend/internal/service/checklist_service"
+	"backend/internal/service/phenophase_service"
 	"backend/internal/service/question_service"
 	"backend/internal/service/report_service"
+	"backend/internal/service/variety_service"
 	"backend/internal/storage"
 )
 
@@ -32,21 +34,36 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 	questionRepo := repository.NewQuestionRepository(db)
+	questionFormulaRepo := repository.NewQuestionFormulaRepository(db)
 	checklistRepo := repository.NewChecklistRepository(db)
+	varietyRepo := repository.NewVarietyRepository(db)
+	phenophaseRepo := repository.NewPhenophaseRepository(db)
 
 	// JWT
 	jwtManager := auth_service.NewJWTManager()
 
 	// Services
 	authService := auth_service.NewAuthService(userRepo, jwtManager)
-	questionService := question_service.NewQuestionService(questionRepo)
+
+	questionService := question_service.NewQuestionService(
+		questionRepo,
+		questionFormulaRepo,
+	)
+
 	checklistService := checklist_service.NewChecklistService(checklistRepo, userRepo)
+
+	varietyService := variety_service.NewVarietyService(varietyRepo)
+	phenophaseService := phenophase_service.NewPhenophaseService(phenophaseRepo)
+
 	reportService := report_service.NewReportService(
 		db,
 		reportRepo,
 		questionRepo,
 		checklistRepo,
 		userRepo,
+		varietyRepo,
+		phenophaseRepo,
+		questionFormulaRepo,
 	)
 
 	// Handlers
@@ -54,6 +71,8 @@ func main() {
 	reportHandler := handler.NewReportHandler(reportService)
 	questionHandler := handler.NewQuestionHandler(questionService)
 	checklistHandler := handler.NewChecklistHandler(checklistService)
+	varietyHandler := handler.NewVarietyHandler(varietyService)
+	phenophaseHandler := handler.NewPhenophaseHandler(phenophaseService)
 
 	// File storage
 	fileStorage := storage.NewFileStorage(cfg.UploadDir, cfg.BaseURL)
@@ -62,12 +81,29 @@ func main() {
 	// Router
 	router := mux.NewRouter()
 
-	// ===== API ROUTES (with /api prefix) =====
+	// ===== API ROUTES =====
 	api := router.PathPrefix("/api").Subrouter()
 
 	// AUTH
 	api.HandleFunc("/register", authHandler.Register).Methods("POST")
 	api.HandleFunc("/login", authHandler.Login).Methods("POST")
+
+	// USER
+	api.Handle("/me",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(authHandler.Me),
+		),
+	).Methods("GET")
+
+	api.Handle("/admin",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("admin only"))
+				}),
+			),
+		),
+	).Methods("GET")
 
 	// CHECKLISTS
 	api.HandleFunc("/checklists", checklistHandler.GetAll).Methods("GET")
@@ -91,27 +127,6 @@ func main() {
 		),
 	).Methods("POST")
 
-	// TEST
-	api.Handle("/me",
-		middleware.AuthMiddleware(jwtManager)(
-			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				userID := r.Context().Value(middleware.UserIDKey)
-				role := r.Context().Value(middleware.RoleKey)
-				w.Write([]byte("Hello user " + userID.(string) + " role: " + role.(string)))
-			}),
-		),
-	).Methods("GET")
-
-	api.Handle("/admin",
-		middleware.AuthMiddleware(jwtManager)(
-			middleware.RequireRole("admin")(
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Write([]byte("admin only"))
-				}),
-			),
-		),
-	).Methods("GET")
-
 	// REPORTS
 	api.Handle("/reports",
 		middleware.AuthMiddleware(jwtManager)(
@@ -131,6 +146,14 @@ func main() {
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(reportHandler.ExportExcel),
+			),
+		),
+	).Methods("GET")
+
+	api.Handle("/reports/phenophase-matrix",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(reportHandler.GetPhenophaseMatrixReport),
 			),
 		),
 	).Methods("GET")
@@ -163,6 +186,14 @@ func main() {
 	api.Handle("/questions/{id}",
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
+				http.HandlerFunc(questionHandler.GetByID),
+			),
+		),
+	).Methods("GET")
+
+	api.Handle("/questions/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
 				http.HandlerFunc(questionHandler.Update),
 			),
 		),
@@ -172,6 +203,80 @@ func main() {
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(questionHandler.Delete),
+			),
+		),
+	).Methods("DELETE")
+
+	// VARIETIES
+	api.Handle("/varieties",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(varietyHandler.GetAll),
+		),
+	).Methods("GET")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(varietyHandler.GetByID),
+		),
+	).Methods("GET")
+
+	api.Handle("/varieties",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Create),
+			),
+		),
+	).Methods("POST")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Update),
+			),
+		),
+	).Methods("PUT")
+
+	api.Handle("/varieties/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(varietyHandler.Delete),
+			),
+		),
+	).Methods("DELETE")
+
+	// PHENOPHASES
+	api.Handle("/phenophases",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(phenophaseHandler.GetAll),
+		),
+	).Methods("GET")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(phenophaseHandler.GetByID),
+		),
+	).Methods("GET")
+
+	api.Handle("/phenophases",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Create),
+			),
+		),
+	).Methods("POST")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Update),
+			),
+		),
+	).Methods("PUT")
+
+	api.Handle("/phenophases/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(phenophaseHandler.Delete),
 			),
 		),
 	).Methods("DELETE")

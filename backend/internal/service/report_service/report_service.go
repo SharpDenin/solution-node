@@ -15,11 +15,14 @@ import (
 const allowAdminCreateAnyChecklist = true
 
 type ReportService struct {
-	db            *repository.DB
-	reportRepo    repository.ReportRepository
-	questionRepo  repository.QuestionRepository
-	checklistRepo repository.ChecklistRepository
-	userRepo      repository.UserRepository
+	db             *repository.DB
+	reportRepo     repository.ReportRepository
+	questionRepo   repository.QuestionRepository
+	checklistRepo  repository.ChecklistRepository
+	userRepo       repository.UserRepository
+	varietyRepo    repository.VarietyRepository
+	phenophaseRepo repository.PhenophaseRepository
+	formulaRepo    repository.QuestionFormulaRepository
 }
 
 func NewReportService(
@@ -28,13 +31,19 @@ func NewReportService(
 	questionRepo repository.QuestionRepository,
 	checklistRepo repository.ChecklistRepository,
 	userRepo repository.UserRepository,
+	varietyRepo repository.VarietyRepository,
+	phenophaseRepo repository.PhenophaseRepository,
+	formulaRepo repository.QuestionFormulaRepository,
 ) *ReportService {
 	return &ReportService{
-		db:            db,
-		reportRepo:    reportRepo,
-		questionRepo:  questionRepo,
-		checklistRepo: checklistRepo,
-		userRepo:      userRepo,
+		db:             db,
+		reportRepo:     reportRepo,
+		questionRepo:   questionRepo,
+		checklistRepo:  checklistRepo,
+		userRepo:       userRepo,
+		varietyRepo:    varietyRepo,
+		phenophaseRepo: phenophaseRepo,
+		formulaRepo:    formulaRepo,
 	}
 }
 
@@ -67,6 +76,44 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 		return errors.New("invalid report data")
 	}
 
+	var varietyID *uuid.UUID
+	if req.VarietyID != nil && strings.TrimSpace(*req.VarietyID) != "" {
+		parsedVarietyID, err := uuid.Parse(*req.VarietyID)
+		if err != nil {
+			return errors.New("invalid variety id")
+		}
+
+		if _, err := s.varietyRepo.GetByID(ctx, parsedVarietyID); err != nil {
+			return errors.New("variety not found")
+		}
+
+		varietyID = &parsedVarietyID
+	}
+
+	var phenophaseID *uuid.UUID
+	if req.PhenophaseID != nil && strings.TrimSpace(*req.PhenophaseID) != "" {
+		parsedPhenophaseID, err := uuid.Parse(*req.PhenophaseID)
+		if err != nil {
+			return errors.New("invalid phenophase id")
+		}
+
+		if _, err := s.phenophaseRepo.GetByID(ctx, parsedPhenophaseID); err != nil {
+			return errors.New("phenophase not found")
+		}
+
+		phenophaseID = &parsedPhenophaseID
+	}
+
+	if checklist.Code == "sort_control" {
+		if varietyID == nil {
+			return errors.New("variety is required for phenophase checklist")
+		}
+
+		if phenophaseID == nil {
+			return errors.New("phenophase is required for phenophase checklist")
+		}
+	}
+
 	metadataBytes, err := json.Marshal(req.Metadata)
 	if err != nil {
 		return errors.New("invalid metadata")
@@ -83,6 +130,8 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 		tx,
 		uid,
 		checklistID,
+		varietyID,
+		phenophaseID,
 		req.ReportDate,
 		req.ResponsibleName,
 		metadataBytes,
@@ -102,17 +151,34 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 			return errors.New("question not found")
 		}
 
+		if question == nil {
+			return errors.New("question not found")
+		}
+
 		if question.ChecklistID != checklistID {
 			return errors.New("question does not belong to checklist")
 		}
 
 		var imageURL *string
-		if ans.ImageURL != "" {
-			v := ans.ImageURL
+		if strings.TrimSpace(ans.ImageURL) != "" {
+			v := strings.TrimSpace(ans.ImageURL)
 			imageURL = &v
 		}
 
-		result := evaluateAnswer(question.Formula, ans.AnswerText)
+		formula := question.Formula
+
+		if phenophaseID != nil {
+			phenophaseFormula, err := s.formulaRepo.GetFormula(ctx, qID, *phenophaseID)
+			if err != nil {
+				return errors.New("failed to get question formula")
+			}
+
+			if phenophaseFormula != nil {
+				formula = phenophaseFormula
+			}
+		}
+
+		result := evaluateAnswer(formula, ans.AnswerText)
 
 		err = s.reportRepo.CreateAnswer(
 			ctx,
@@ -143,21 +209,45 @@ func (s *ReportService) ExportReports(ctx context.Context, filters repository.Re
 	return s.reportRepo.GetReportsDetailed(ctx, filters)
 }
 
+func (s *ReportService) GetPhenophaseMatrixReport(
+	ctx context.Context,
+	varietyID uuid.UUID,
+) (*dtos.PhenophaseMatrixReportResponse, error) {
+	if varietyID == uuid.Nil {
+		return nil, errors.New("variety_id is required")
+	}
+
+	return s.reportRepo.GetPhenophaseMatrixReport(ctx, varietyID)
+}
+
 func evaluateAnswer(formula *string, answerText string) *string {
 	if formula == nil || strings.TrimSpace(*formula) == "" {
 		neutral := "neutral"
 		return &neutral
 	}
 
-	answerValue, err := strconv.ParseFloat(strings.ReplaceAll(answerText, ",", "."), 64)
+	f := strings.TrimSpace(*formula)
+	answer := strings.TrimSpace(answerText)
+
+	if strings.HasPrefix(f, "=") {
+		expected := strings.TrimSpace(strings.TrimPrefix(f, "="))
+
+		if strings.EqualFold(answer, expected) {
+			good := "good"
+			return &good
+		}
+
+		bad := "bad"
+		return &bad
+	}
+
+	answerValue, err := strconv.ParseFloat(strings.ReplaceAll(answer, ",", "."), 64)
 	if err != nil {
 		neutral := "neutral"
 		return &neutral
 	}
 
-	f := strings.TrimSpace(*formula)
-
-	operators := []string{">=", "<=", ">", "<", "="}
+	operators := []string{">=", "<=", ">", "<"}
 
 	for _, op := range operators {
 		if strings.HasPrefix(f, op) {
@@ -180,8 +270,6 @@ func evaluateAnswer(formula *string, answerText string) *string {
 				ok = answerValue < threshold
 			case "<=":
 				ok = answerValue <= threshold
-			case "=":
-				ok = answerValue == threshold
 			}
 
 			if ok {

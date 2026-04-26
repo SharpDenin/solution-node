@@ -3,14 +3,13 @@ import { api } from '../api/client';
 import type { Question, Checklist } from '../types';
 
 export const Questions = () => {
-  const [questions, setQuestions] = useState<Question[]>([]);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
-  const [selectedChecklistFilter, setSelectedChecklistFilter] = useState('');
+  const [activeChecklistId, setActiveChecklistId] = useState<string>('');
+  const [questions, setQuestions] = useState<Question[]>([]);
 
   // Новый вопрос
   const [newText, setNewText] = useState('');
   const [newOrder, setNewOrder] = useState(1);
-  const [newChecklistId, setNewChecklistId] = useState('');
   const [newFormula, setNewFormula] = useState('');
 
   // Редактирование
@@ -22,17 +21,27 @@ export const Questions = () => {
 
   const [loading, setLoading] = useState(false);
 
+  // Загружаем чек-листы и устанавливаем первую вкладку активной
   useEffect(() => {
-    api.get('/api/checklists').then(res => setChecklists(res.data));
-    loadQuestions();
+    api.get('/api/checklists').then(res => {
+      setChecklists(res.data);
+      if (res.data.length > 0 && !activeChecklistId) {
+        setActiveChecklistId(res.data[0].id);
+      }
+    });
   }, []);
 
-  const loadQuestions = async (checklistId?: string) => {
+  // При смене активной вкладки загружаем вопросы
+  useEffect(() => {
+    if (activeChecklistId) {
+      loadQuestions(activeChecklistId);
+    }
+  }, [activeChecklistId]);
+
+  const loadQuestions = async (checklistId: string) => {
     setLoading(true);
     try {
-      const params: any = {};
-      if (checklistId) params.checklist_id = checklistId;
-      const res = await api.get('/api/questions', { params });
+      const res = await api.get(`/api/checklists/${checklistId}/questions`);
       const active = res.data.filter((q: Question) => q.is_active);
       setQuestions(active.sort((a: Question, b: Question) => a.order_index - b.order_index));
     } catch (err) {
@@ -43,18 +52,18 @@ export const Questions = () => {
   };
 
   const addQuestion = async () => {
-    if (!newText.trim() || !newChecklistId) return;
+    if (!newText.trim()) return;
     try {
       await api.post('/api/questions', {
         text: newText,
         order_index: newOrder,
-        checklist_id: newChecklistId,
+        checklist_id: activeChecklistId,
         formula: newFormula || null,
       });
       setNewText('');
       setNewFormula('');
-      setNewChecklistId('');
-      loadQuestions(selectedChecklistFilter);
+      setNewOrder(questions.length + 1);
+      loadQuestions(activeChecklistId);
     } catch {
       alert('Не удалось добавить вопрос');
     }
@@ -70,7 +79,7 @@ export const Questions = () => {
         formula: editFormula || null,
       });
       setEditingId(null);
-      loadQuestions(selectedChecklistFilter);
+      loadQuestions(activeChecklistId);
     } catch {
       alert('Не удалось обновить вопрос');
     }
@@ -80,7 +89,7 @@ export const Questions = () => {
     if (!window.confirm('Удалить вопрос?')) return;
     try {
       await api.delete(`/api/questions/${id}`);
-      loadQuestions(selectedChecklistFilter);
+      loadQuestions(activeChecklistId);
     } catch {
       alert('Не удалось удалить вопрос');
     }
@@ -94,29 +103,33 @@ export const Questions = () => {
     setEditFormula(q.formula || '');
   };
 
+  const activeChecklist = checklists.find(c => c.id === activeChecklistId);
+
   return (
     <div>
       <h2>Управление вопросами</h2>
 
-      <div style={styles.filterRow}>
-        <label>Фильтр по чек-листу:</label>
-        <select
-          value={selectedChecklistFilter}
-          onChange={e => {
-            setSelectedChecklistFilter(e.target.value);
-            loadQuestions(e.target.value || undefined);
-          }}
-          style={styles.select}
-        >
-          <option value="">Все</option>
-          {checklists.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+      {/* Вкладки чек-листов */}
+      <div style={styles.tabs}>
+        {checklists.map(cl => (
+          <button
+            key={cl.id}
+            onClick={() => setActiveChecklistId(cl.id)}
+            style={{
+              ...styles.tabButton,
+              ...(activeChecklistId === cl.id ? styles.activeTab : {}),
+            }}
+          >
+            {cl.name}
+          </button>
+        ))}
       </div>
 
+      {/* Форма создания вопроса (всегда подставляется активный чек-лист) */}
       <div style={styles.newForm}>
-        <h3>Новый вопрос</h3>
+        <h3>
+          Новый вопрос для «{activeChecklist?.name || '...'}»
+        </h3>
         <input
           value={newText}
           onChange={e => setNewText(e.target.value)}
@@ -130,23 +143,15 @@ export const Questions = () => {
           placeholder="Порядок"
           style={styles.inputSmall}
         />
-        <select
-          value={newChecklistId}
-          onChange={e => setNewChecklistId(e.target.value)}
-          style={styles.select}
-        >
-          <option value="">Выберите чек-лист</option>
-          {checklists.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
         <input
           value={newFormula}
           onChange={e => setNewFormula(e.target.value)}
           placeholder="Формула (напр. >0.5)"
           style={styles.input}
         />
-        <button onClick={addQuestion} style={styles.addBtn}>Добавить</button>
+        <button onClick={addQuestion} style={styles.addBtn}>
+          Добавить
+        </button>
       </div>
 
       {loading && <p>Загрузка...</p>}
@@ -156,11 +161,27 @@ export const Questions = () => {
           {editingId === q.id ? (
             <div style={{ flex: 1 }}>
               <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-              <input type="number" value={editOrder} onChange={e => setEditOrder(parseInt(e.target.value) || 0)} style={styles.inputSmall} />
-              <select value={editChecklistId} onChange={e => setEditChecklistId(e.target.value)} style={styles.select}>
-                {checklists.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <input
+                type="number"
+                value={editOrder}
+                onChange={e => setEditOrder(parseInt(e.target.value) || 0)}
+                style={styles.inputSmall}
+              />
+              <select
+                value={editChecklistId}
+                onChange={e => setEditChecklistId(e.target.value)}
+                style={styles.select}
+              >
+                {checklists.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
-              <input value={editFormula} onChange={e => setEditFormula(e.target.value)} placeholder="Формула" style={styles.input} />
+              <input
+                value={editFormula}
+                onChange={e => setEditFormula(e.target.value)}
+                placeholder="Формула"
+                style={styles.input}
+              />
               <button onClick={() => updateQuestion(q.id)} style={styles.saveBtn}>Сохранить</button>
               <button onClick={() => setEditingId(null)} style={styles.cancelBtn}>Отмена</button>
             </div>
@@ -168,10 +189,9 @@ export const Questions = () => {
             <>
               <div style={{ flex: 1 }}>
                 <strong>{q.order_index}.</strong> {q.text}
-                {q.formula && <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>}
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                  Чек-лист: {checklists.find(c => c.id === q.checklist_id)?.name || q.checklist_id}
-                </div>
+                {q.formula && (
+                  <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>
+                )}
               </div>
               <button onClick={() => startEdit(q)} style={styles.editBtn}>✏️</button>
               <button onClick={() => deleteQuestion(q.id)} style={styles.deleteBtn}>🗑️</button>
@@ -179,13 +199,39 @@ export const Questions = () => {
           )}
         </div>
       ))}
-      {!loading && questions.length === 0 && <p>Нет активных вопросов.</p>}
+
+      {!loading && questions.length === 0 && (
+        <p>Нет активных вопросов для этого чек-листа.</p>
+      )}
     </div>
   );
 };
 
 const styles = {
   filterRow: { marginBottom: 20 },
+  tabs: {
+    display: 'flex',
+    gap: 0,
+    marginBottom: 24,
+    borderBottom: '2px solid #e5e7eb',
+  },
+  tabButton: {
+    padding: '10px 20px',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    marginBottom: '-2px',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500,
+    color: '#6b7280',
+    transition: 'all 0.2s',
+    outline: 'none',
+  },
+  activeTab: {
+    color: '#16a34a',
+    borderBottom: '2px solid #16a34a',
+  },
   newForm: { background: 'white', padding: 16, borderRadius: 12, marginBottom: 24 },
   input: { width: '100%', padding: 8, marginBottom: 8, borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' as const },
   inputSmall: { width: 100, padding: 8, marginRight: 8, borderRadius: 6, border: '1px solid #ccc' },

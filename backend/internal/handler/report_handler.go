@@ -221,6 +221,12 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 		file.SetCellStyle(sheetName, startCell, endCell, headerStyle)
 		row++
 
+		// Парсим метаданные
+		var meta map[string]interface{}
+		if err := json.Unmarshal(report.Metadata, &meta); err != nil {
+			meta = make(map[string]interface{})
+		}
+
 		metaCell := fmt.Sprintf("A%d", row)
 		metaEndCell := fmt.Sprintf("D%d", row)
 
@@ -229,9 +235,29 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		file.SetCellValue(sheetName, metaCell, fmt.Sprintf("Метаданные: %s", string(report.Metadata)))
+		// Формируем читаемый текст метаданных
+		var metaText string
+		if sortValue, ok := meta["sort"].(string); ok && sortValue != "" {
+			priority := ""
+			if prio, ok := meta["priority_sort"].(string); ok {
+				if prio == "high" {
+					priority = " (приоритет: высокий)"
+				} else if prio == "low" {
+					priority = " (приоритет: низкий)"
+				}
+			}
+			metaText = fmt.Sprintf("Сорт: %s%s", sortValue, priority)
+		} else if placeValue, ok := meta["place"].(string); ok && placeValue != "" {
+			metaText = fmt.Sprintf("Место: %s", placeValue)
+		} else {
+			// На случай, если metadata пришла в неожиданном формате
+			metaText = fmt.Sprintf("Метаданные: %s", string(report.Metadata))
+		}
+
+		file.SetCellValue(sheetName, metaCell, metaText)
 		row++
 
+		// Заголовки таблицы ответов
 		headers := []string{"Вопрос", "Ответ", "Результат", "Изображение"}
 		for i, title := range headers {
 			col := string(rune('A' + i))
@@ -254,11 +280,21 @@ func (h *ReportHandler) ExportExcel(w http.ResponseWriter, r *http.Request) {
 				file.SetCellValue(sheetName, fmt.Sprintf("A%d", row), ans.QuestionText)
 				file.SetCellValue(sheetName, fmt.Sprintf("B%d", row), ans.AnswerText)
 
+				// Локализация результата
+				resultText := ""
 				if ans.Result != nil {
-					file.SetCellValue(sheetName, fmt.Sprintf("C%d", row), *ans.Result)
-				} else {
-					file.SetCellValue(sheetName, fmt.Sprintf("C%d", row), "")
+					switch *ans.Result {
+					case "good":
+						resultText = "хорошо"
+					case "bad":
+						resultText = "плохо"
+					case "neutral":
+						resultText = ""
+					default:
+						resultText = *ans.Result
+					}
 				}
+				file.SetCellValue(sheetName, fmt.Sprintf("C%d", row), resultText)
 
 				if ans.ImageURL != nil {
 					file.SetCellValue(sheetName, fmt.Sprintf("D%d", row), *ans.ImageURL)

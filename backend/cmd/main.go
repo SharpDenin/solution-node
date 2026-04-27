@@ -321,7 +321,7 @@ func main() {
 			),
 		),
 	).Methods("PATCH")
-
+	//
 	api.Handle("/admin/users/{id}/block",
 		middleware.AuthMiddleware(jwtManager)(
 			middleware.RequireRole("admin")(

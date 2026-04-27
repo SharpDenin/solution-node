@@ -1,0 +1,4 @@
+ALTER TABLE users
+    ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN updated_at TIMESTAMP DEFAULT now();

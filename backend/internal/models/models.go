@@ -14,7 +14,10 @@ type User struct {
 	PasswordHash string    `db:"password_hash"`
 	RoleID       uuid.UUID `db:"role_id"`
 	Position     *string   `db:"position"`
+	IsBlocked    bool      `db:"is_blocked"`
+	IsDeleted    bool      `db:"is_deleted"`
 	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
 type Role struct {

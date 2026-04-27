@@ -116,3 +116,15 @@ export interface PhenophaseMatrixCell {
   image_url: string | null;
   report_id: string | null;
 }
+
+export interface UserAdmin {
+  id: string;
+  full_name: string;
+  login: string;
+  role: string;
+  position?: string;
+  is_blocked: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}

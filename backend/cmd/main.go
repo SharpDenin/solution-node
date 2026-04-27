@@ -281,6 +281,55 @@ func main() {
 		),
 	).Methods("DELETE")
 
+	// ADMIN USERS
+	api.Handle("/admin/users",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.GetAllUsers),
+			),
+		),
+	).Methods("GET")
+
+	api.Handle("/admin/users/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.UpdateUser),
+			),
+		),
+	).Methods("PUT")
+
+	api.Handle("/admin/users/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.DeleteUser),
+			),
+		),
+	).Methods("DELETE")
+
+	api.Handle("/admin/users/{id}/restore",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.RestoreUser),
+			),
+		),
+	).Methods("PATCH")
+
+	api.Handle("/admin/users/{id}/block",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.BlockUser),
+			),
+		),
+	).Methods("PATCH")
+
+	api.Handle("/admin/users/{id}/unblock",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(authHandler.UnblockUser),
+			),
+		),
+	).Methods("PATCH")
+
 	// STATIC FILES
 	fs := http.FileServer(http.Dir(cfg.UploadDir))
 	router.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", fs))

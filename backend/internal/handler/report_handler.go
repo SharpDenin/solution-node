@@ -333,3 +333,20 @@ func parseReportFilters(r *http.Request) repository.ReportFilters {
 
 	return filters
 }
+
+func (h *ReportHandler) DeleteReport(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if err := h.reportService.DeleteReport(r.Context(), id); err != nil {
+		if err.Error() == "report not found" {
+			http.Error(w, "report not found", http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -56,8 +56,8 @@ export const Dashboard = () => {
     try {
       const params: any = {
         checklist_id: activeChecklistId,
-        limit: 1000,   // исправление
-        offset: 0,     // исправление
+        limit: 1000,
+        offset: 0,
       };
       if (filters.date_from) params.date_from = filters.date_from;
       if (filters.date_to) params.date_to = filters.date_to;
@@ -106,6 +106,17 @@ export const Dashboard = () => {
   const resetFilters = () => {
     const { start, end } = getCurrentYearRange();
     setFilters({ date_from: start, date_to: end, user_name: '' });
+  };
+
+  // Удаление отчёта
+  const deleteReport = async (id: string) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот отчёт?')) return;
+    try {
+      await api.delete(`/api/reports/${id}`);
+      fetchReports(); // обновить список после удаления
+    } catch (err: any) {
+      alert(err?.response?.data || 'Ошибка удаления отчёта');
+    }
   };
 
   const activeChecklist = checklists.find(c => c.id === activeChecklistId);
@@ -211,9 +222,21 @@ export const Dashboard = () => {
           return (
             <div
               key={report.id}
-              style={styles.card}
+              style={{ ...styles.card, position: 'relative' }}
               onClick={() => navigate(`/reports/${report.id}`)}
             >
+              {/* Кнопка удаления */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation(); // чтобы не переходить на страницу отчёта
+                  deleteReport(report.id);
+                }}
+                style={styles.deleteBtn}
+                title="Удалить отчёт"
+              >
+                🗑️
+              </button>
+
               <div style={styles.cardHeader}>
                 <strong style={{ color: priorityColor }}>{title}</strong>
                 <span>{new Date(report.report_date).toLocaleDateString('ru-RU')}</span>
@@ -271,9 +294,29 @@ const styles = {
   filterInput: { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14 },
   resetBtn: { background: '#6b7280', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
   list: { display: 'flex', flexDirection: 'column' as const, gap: 12 },
-  card: { background: 'white', padding: 16, borderRadius: 12, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  card: {
+    background: 'white',
+    padding: 16,
+    borderRadius: 12,
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    position: 'relative', // важно для позиционирования кнопки удаления
+  },
   cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 },
   cardFooter: { marginTop: 8, fontSize: 12, color: '#6b7280' },
   noData: { textAlign: 'center' as const, padding: 20, color: '#6b7280' },
   error: { background: '#fee2e2', color: '#b91c1c', padding: '12px', borderRadius: 8, marginBottom: 16 },
+  deleteBtn: {
+    position: 'absolute' as const,
+    bottom: 8,
+    right: 8,
+    background: 'transparent',
+    border: 'none',
+    fontSize: 18,
+    cursor: 'pointer',
+    color: '#ef4444',
+    zIndex: 2,
+    padding: 4,
+    lineHeight: 1,
+  },
 };

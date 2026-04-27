@@ -166,6 +166,14 @@ func main() {
 		),
 	).Methods("GET")
 
+	api.Handle("/reports/{id}",
+		middleware.AuthMiddleware(jwtManager)(
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(reportHandler.DeleteReport),
+			),
+		),
+	).Methods("DELETE")
+
 	// QUESTIONS
 	api.Handle("/questions",
 		middleware.AuthMiddleware(jwtManager)(

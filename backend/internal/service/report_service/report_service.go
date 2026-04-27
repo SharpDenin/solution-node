@@ -220,6 +220,15 @@ func (s *ReportService) GetPhenophaseMatrixReport(
 	return s.reportRepo.GetPhenophaseMatrixReport(ctx, varietyID)
 }
 
+func (s *ReportService) DeleteReport(ctx context.Context, id string) error {
+	reportID, err := uuid.Parse(id)
+	if err != nil {
+		return errors.New("invalid report id")
+	}
+
+	return s.reportRepo.DeleteReport(ctx, reportID)
+}
+
 func evaluateAnswer(formula *string, answerText string) *string {
 	if formula == nil || strings.TrimSpace(*formula) == "" {
 		neutral := "neutral"

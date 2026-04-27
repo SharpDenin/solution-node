@@ -50,6 +50,8 @@ type ReportRepository interface {
 	GetReportByID(ctx context.Context, id string) (*dtos.ReportDetailResponse, error)
 	GetReportsDetailed(ctx context.Context, filters ReportFilters) ([]dtos.ReportDetailResponse, error)
 	GetPhenophaseMatrixReport(ctx context.Context, varietyID uuid.UUID) (*dtos.PhenophaseMatrixReportResponse, error)
+
+	DeleteReport(ctx context.Context, id uuid.UUID) error
 }
 
 type reportRepository struct {
@@ -707,6 +709,24 @@ func (r *reportRepository) GetPhenophaseMatrixReport(
 		Columns:   columns,
 		Rows:      rows,
 	}, nil
+}
+
+func (r *reportRepository) DeleteReport(ctx context.Context, id uuid.UUID) error {
+	query := `
+		DELETE FROM reports
+		WHERE id = $1
+	`
+
+	commandTag, err := r.db.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("report not found")
+	}
+
+	return nil
 }
 
 func derefString(s *string) string {

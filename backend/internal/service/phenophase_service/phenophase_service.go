@@ -18,7 +18,15 @@ func NewPhenophaseService(repo repository.PhenophaseRepository) *PhenophaseServi
 	return &PhenophaseService{repo: repo}
 }
 
-func (s *PhenophaseService) Create(ctx context.Context, name, description, imageURL string, orderIndex int) error {
+func (s *PhenophaseService) Create(
+	ctx context.Context,
+	name string,
+	description string,
+	imageURL string,
+	orderIndex int,
+	minCriticalTemperature *float64,
+	criticalTemperature *float64,
+) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("name is required")
 	}
@@ -36,10 +44,12 @@ func (s *PhenophaseService) Create(ctx context.Context, name, description, image
 	}
 
 	phenophase := &models.Phenophase{
-		Name:        strings.TrimSpace(name),
-		Description: descPtr,
-		ImageURL:    imagePtr,
-		OrderIndex:  orderIndex,
+		Name:                   strings.TrimSpace(name),
+		Description:            descPtr,
+		ImageURL:               imagePtr,
+		OrderIndex:             orderIndex,
+		MinCriticalTemperature: minCriticalTemperature,
+		CriticalTemperature:    criticalTemperature,
 	}
 
 	return s.repo.Create(ctx, phenophase)
@@ -58,7 +68,16 @@ func (s *PhenophaseService) GetByID(ctx context.Context, id string) (*models.Phe
 	return s.repo.GetByID(ctx, parsedID)
 }
 
-func (s *PhenophaseService) Update(ctx context.Context, id, name, description, imageURL string, orderIndex int) error {
+func (s *PhenophaseService) Update(
+	ctx context.Context,
+	id string,
+	name string,
+	description string,
+	imageURL string,
+	orderIndex int,
+	minCriticalTemperature *float64,
+	criticalTemperature *float64,
+) error {
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
 		return errors.New("invalid phenophase id")
@@ -81,11 +100,13 @@ func (s *PhenophaseService) Update(ctx context.Context, id, name, description, i
 	}
 
 	phenophase := &models.Phenophase{
-		ID:          parsedID,
-		Name:        strings.TrimSpace(name),
-		Description: descPtr,
-		ImageURL:    imagePtr,
-		OrderIndex:  orderIndex,
+		ID:                     parsedID,
+		Name:                   strings.TrimSpace(name),
+		Description:            descPtr,
+		ImageURL:               imagePtr,
+		OrderIndex:             orderIndex,
+		MinCriticalTemperature: minCriticalTemperature,
+		CriticalTemperature:    criticalTemperature,
 	}
 
 	return s.repo.Update(ctx, phenophase)

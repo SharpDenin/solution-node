@@ -125,6 +125,40 @@ func (h *QuestionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *QuestionHandler) GetByChecklistWithDefaults(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	checklistID, err := uuid.Parse(vars["id"])
+	if err != nil {
+		http.Error(w, "invalid checklist id", http.StatusBadRequest)
+		return
+	}
+
+	phenophaseIDRaw := r.URL.Query().Get("phenophase_id")
+	if phenophaseIDRaw == "" {
+		http.Error(w, "phenophase_id is required", http.StatusBadRequest)
+		return
+	}
+
+	phenophaseID, err := uuid.Parse(phenophaseIDRaw)
+	if err != nil {
+		http.Error(w, "invalid phenophase_id", http.StatusBadRequest)
+		return
+	}
+
+	questions, err := h.questionService.GetByChecklistWithDefaults(
+		r.Context(),
+		checklistID,
+		phenophaseID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, questions)
+}
+
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -33,6 +33,8 @@ func (h *PhenophaseHandler) Create(w http.ResponseWriter, r *http.Request) {
 		req.Description,
 		req.ImageURL,
 		req.OrderIndex,
+		req.MinCriticalTemperature,
+		req.CriticalTemperature,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -80,6 +82,8 @@ func (h *PhenophaseHandler) Update(w http.ResponseWriter, r *http.Request) {
 		req.Description,
 		req.ImageURL,
 		req.OrderIndex,
+		req.MinCriticalTemperature,
+		req.CriticalTemperature,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -113,11 +117,13 @@ func mapPhenophasesToResponse(phenophases []models.Phenophase) []responses.Pheno
 
 func mapPhenophaseToResponse(phenophase models.Phenophase) responses.PhenophaseResponse {
 	return responses.PhenophaseResponse{
-		ID:          phenophase.ID.String(),
-		Name:        phenophase.Name,
-		Description: phenophase.Description,
-		ImageURL:    phenophase.ImageURL,
-		OrderIndex:  phenophase.OrderIndex,
-		CreatedAt:   phenophase.CreatedAt,
+		ID:                     phenophase.ID.String(),
+		Name:                   phenophase.Name,
+		Description:            phenophase.Description,
+		ImageURL:               phenophase.ImageURL,
+		OrderIndex:             phenophase.OrderIndex,
+		MinCriticalTemperature: phenophase.MinCriticalTemperature,
+		CriticalTemperature:    phenophase.CriticalTemperature,
+		CreatedAt:              phenophase.CreatedAt,
 	}
 }

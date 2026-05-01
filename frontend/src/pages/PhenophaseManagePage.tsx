@@ -14,6 +14,10 @@ export const PhenophaseManagePage = () => {
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [orderIndex, setOrderIndex] = useState(1);
 
+  // Новые поля температурных порогов
+  const [minCritTemp, setMinCritTemp] = useState<string>('');
+  const [critTemp, setCritTemp] = useState<string>('');
+
   const fetchPhenophases = async () => {
     setLoading(true);
     try {
@@ -50,6 +54,8 @@ export const PhenophaseManagePage = () => {
     setDescription('');
     setImageUrl(undefined);
     setOrderIndex(phenophases.length + 1);
+    setMinCritTemp('');
+    setCritTemp('');
     setShowForm(true);
   };
 
@@ -59,6 +65,8 @@ export const PhenophaseManagePage = () => {
     setDescription(p.description || '');
     setImageUrl(p.image_url || undefined);
     setOrderIndex(p.order_index);
+    setMinCritTemp(p.min_critical_temperature?.toString() ?? '');
+    setCritTemp(p.critical_temperature?.toString() ?? '');
     setShowForm(true);
   };
 
@@ -69,6 +77,8 @@ export const PhenophaseManagePage = () => {
       description,
       image_url: imageUrl || '',
       order_index: orderIndex,
+      min_critical_temperature: minCritTemp !== '' ? Number(minCritTemp) : null,
+      critical_temperature: critTemp !== '' ? Number(critTemp) : null,
     };
     try {
       if (editingId) {
@@ -145,6 +155,31 @@ export const PhenophaseManagePage = () => {
                 style={styles.input}
               />
             </div>
+
+            {/* Поля температурных порогов */}
+            <div style={{ marginBottom: 12 }}>
+              <label>Минимальный критический порог, °C</label>
+              <input
+                type="number"
+                step="0.1"
+                value={minCritTemp}
+                onChange={e => setMinCritTemp(e.target.value)}
+                placeholder="Например: -3"
+                style={styles.input}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label>Критический температурный порог, °C</label>
+              <input
+                type="number"
+                step="0.1"
+                value={critTemp}
+                onChange={e => setCritTemp(e.target.value)}
+                placeholder="Например: 7"
+                style={styles.input}
+              />
+            </div>
+
             <ImageUploader
               imageUrl={imageUrl}
               onUpload={async (file) => {

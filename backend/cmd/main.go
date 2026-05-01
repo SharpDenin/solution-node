@@ -48,6 +48,7 @@ func main() {
 	questionService := question_service.NewQuestionService(
 		questionRepo,
 		questionFormulaRepo,
+		phenophaseRepo,
 	)
 
 	checklistService := checklist_service.NewChecklistService(checklistRepo, userRepo)
@@ -111,6 +112,12 @@ func main() {
 	api.Handle("/checklists/available",
 		middleware.AuthMiddleware(jwtManager)(
 			http.HandlerFunc(checklistHandler.GetAvailableForCurrentUser),
+		),
+	).Methods("GET")
+
+	api.Handle("/checklists/{id}/questions/defaults",
+		middleware.AuthMiddleware(jwtManager)(
+			http.HandlerFunc(questionHandler.GetByChecklistWithDefaults),
 		),
 	).Methods("GET")
 

@@ -43,7 +43,7 @@ export const ChecklistReport = () => {
       });
     };
 
-    const loadQuestions = (cl: Checklist) => {
+    const loadQuestions = async (cl: Checklist) => {
       if (cl.code === 'sort_control') {
         const varietyId = searchParams.get('varietyId');
         const phenophaseId = searchParams.get('phenophaseId');
@@ -51,30 +51,46 @@ export const ChecklistReport = () => {
           navigate(`/checklist/${checklistId}/variety`);
           return Promise.reject('need selection');
         }
-        return Promise.all([
+        const [vRes, pRes] = await Promise.all([
           api.get(`/api/varieties/${varietyId}`),
           api.get(`/api/phenophases/${phenophaseId}`)
-        ]).then(([vRes, pRes]) => {
-          setVariety(vRes.data);
-          setPhenophase(pRes.data);
-        }).then(() => api.get(`/api/checklists/${checklistId}/questions`));
+        ]);
+        setVariety(vRes.data);
+        setPhenophase(pRes.data);
+
+        // Новый эндпоинт с автозаполнением
+        const res = await api.get(
+          `/api/checklists/${checklistId}/questions/defaults?phenophase_id=${phenophaseId}`
+        );
+        return res.data;
       } else {
-        return api.get(`/api/checklists/${checklistId}/questions`);
+        const res = await api.get(`/api/checklists/${checklistId}/questions`);
+        return res.data;
       }
     };
 
-    const processData = (questionsData: any[]) => {
-      const sorted = (questionsData as Question[])
+    const processData = (questionsData: Question[]) => {
+      const sorted = questionsData
         .filter(q => q.is_active)
         .sort((a, b) => a.order_index - b.order_index);
       setQuestions(sorted);
+
+      // Автозаполнение ответов из default_answer
+      const initialAnswers: Record<string, AnswerPayload> = {};
+      sorted.forEach(q => {
+        initialAnswers[q.id] = {
+          question_id: q.id,
+          answer_text: q.default_answer ?? '',
+          image_url: undefined,
+        };
+      });
+      setAnswers(initialAnswers);
     };
 
     if (role === 'admin') {
       loadChecklistById()
         .then(cl => loadQuestions(cl))
-        .then(res => {
-          const data = res?.data;
+        .then(data => {
           if (Array.isArray(data)) {
             processData(data);
           } else if (data) {
@@ -101,8 +117,7 @@ export const ChecklistReport = () => {
           setChecklist(found);
           return loadQuestions(found);
         })
-        .then(res => {
-          const data = res?.data;
+        .then(data => {
           if (Array.isArray(data)) {
             processData(data);
           } else if (data) {
@@ -153,53 +168,50 @@ export const ChecklistReport = () => {
     }));
   };
 
- const handleSubmit = async () => {
-  if (!date || !fullName) {
-    alert('Заполните обязательные поля');
-    return;
-  }
+  const handleSubmit = async () => {
+    if (!date || !fullName) {
+      alert('Заполните обязательные поля');
+      return;
+    }
 
-  const payload: any = {
-    checklist_id: checklistId,
-    report_date: date,
-    responsible_name: fullName,
-    metadata: {},
-    answers: Object.values(answers).map(a => ({
-      question_id: a.question_id,
-      answer_text: a.answer_text,
-      image_url: a.image_url || '',
-    })),
+    const payload: any = {
+      checklist_id: checklistId,
+      report_date: date,
+      responsible_name: fullName,
+      metadata: {},
+      answers: Object.values(answers).map(a => ({
+        question_id: a.question_id,
+        answer_text: a.answer_text,
+        image_url: a.image_url || '',
+      })),
+    };
+
+    if (checklist?.code === 'sort_control' && variety && phenophase) {
+      payload.variety_id = variety.id;
+      payload.phenophase_id = phenophase.id;
+      payload.metadata = {
+        sort: variety.name,
+        priority_sort: variety.priority,
+        phenophase: phenophase.name,
+        variety_id: variety.id,
+        phenophase_id: phenophase.id,
+      };
+    } else if (checklist?.code === 'default') {
+      payload.metadata = {
+        place: place || 'Не указано',
+      };
+    }
+
+    setLoading(true);
+    try {
+      await api.post('/api/reports', payload);
+      navigate('/thank-you');
+    } catch {
+      alert('Ошибка отправки отчёта');
+    } finally {
+      setLoading(false);
+    }
   };
-
-  if (checklist?.code === 'sort_control' && variety && phenophase) {
-    // Поля, обязательные для sort_control
-    payload.variety_id = variety.id;
-    payload.phenophase_id = phenophase.id;
-
-    payload.metadata = {
-      sort: variety.name,
-      priority_sort: variety.priority,
-      phenophase: phenophase.name,
-      variety_id: variety.id,
-      phenophase_id: phenophase.id,
-    };
-  } else if (checklist?.code === 'default') {
-    payload.metadata = {
-      place: place || 'Не указано',
-    };
-    // для default поля variety_id/phenophase_id не передаём
-  }
-
-  setLoading(true);
-  try {
-    await api.post('/api/reports', payload);
-    navigate('/thank-you');
-  } catch {
-    alert('Ошибка отправки отчёта');
-  } finally {
-    setLoading(false);
-  }
-};
 
   if (checkingAccess) return <div>Проверка доступа...</div>;
   if (!checklist) return <div>Чек-лист не найден</div>;
@@ -288,7 +300,11 @@ const QuestionCard = ({
 }: QuestionCardProps) => {
   const [dragActive, setDragActive] = useState(false);
 
+  // Если есть дефолтный ответ – блокируем ввод и фото
+  const hasDefault = !!question.default_answer;
+
   const handleDrag = (e: React.DragEvent) => {
+    if (hasDefault) return;
     e.preventDefault();
     e.stopPropagation();
     if (e.type === 'dragenter' || e.type === 'dragover') {
@@ -299,6 +315,7 @@ const QuestionCard = ({
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    if (hasDefault) return;
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -309,6 +326,7 @@ const QuestionCard = ({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (hasDefault) return;
     const file = e.target.files?.[0];
     if (file) onImageUpload(file);
   };
@@ -320,41 +338,55 @@ const QuestionCard = ({
         {question.image_url && (
           <img src={question.image_url} style={{ width: 32, height: 32, borderRadius: 4 }} alt="q" />
         )}
+        {hasDefault && (
+          <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 8 }}>
+            (автозаполнено)
+          </span>
+        )}
       </div>
       <textarea
         placeholder="Ваш ответ"
         value={answer?.answer_text || ''}
         onChange={e => onAnswerChange(e.target.value)}
-        style={styles.textarea}
-        rows={3}
-      />
-      <div
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
         style={{
-          ...styles.dropZone,
-          borderColor: dragActive ? '#16a34a' : '#ccc',
-          backgroundColor: dragActive ? '#f0fdf4' : '#fafafa',
+          ...styles.textarea,
+          backgroundColor: hasDefault ? '#f3f4f6' : 'white',
+          color: hasDefault ? '#6b7280' : 'inherit',
         }}
-      >
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-          id={`file-${question.id}`}
-        />
-        <label htmlFor={`file-${question.id}`} style={styles.uploadLabel}>
-          📸 Нажмите для выбора или перетащите изображение
-        </label>
-      </div>
-      {answer?.image_url && (
-        <div style={styles.imagePreview}>
-          <img src={answer.image_url} style={styles.image} alt="фото" />
-          <button onClick={onImageRemove} style={styles.removeImage}>✕</button>
-        </div>
+        rows={3}
+        disabled={hasDefault}
+      />
+      {!hasDefault && (
+        <>
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            style={{
+              ...styles.dropZone,
+              borderColor: dragActive ? '#16a34a' : '#ccc',
+              backgroundColor: dragActive ? '#f0fdf4' : '#fafafa',
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+              id={`file-${question.id}`}
+            />
+            <label htmlFor={`file-${question.id}`} style={styles.uploadLabel}>
+              📸 Нажмите для выбора или перетащите изображение
+            </label>
+          </div>
+          {answer?.image_url && (
+            <div style={styles.imagePreview}>
+              <img src={answer.image_url} style={styles.image} alt="фото" />
+              <button onClick={onImageRemove} style={styles.removeImage}>✕</button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

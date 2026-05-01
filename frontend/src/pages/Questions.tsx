@@ -22,7 +22,7 @@ export const Questions = () => {
   const [editImageUrl, setEditImageUrl] = useState<string | undefined>(undefined);
   const [editFormulaDefault, setEditFormulaDefault] = useState('');
   const [editFormulas, setEditFormulas] = useState<QuestionPhenophaseFormula[]>([]);
-  const [editOrder, setEditOrder] = useState(0); // не показываем, но храним для отправки
+  const [editOrder, setEditOrder] = useState(0);
 
   const [loading, setLoading] = useState(false);
 
@@ -120,8 +120,8 @@ export const Questions = () => {
     setEditChecklistId(q.checklist_id);
     setEditImageUrl(q.image_url);
     setEditFormulaDefault(q.formula || '');
-    setEditOrder(q.order_index); // сохраняем текущий порядок
-    if (isSortControl) {
+    setEditOrder(q.order_index);
+    if (isSortControl && !q.technical_code) {
       const existingFormulas = q.formulas || [];
       const merged = phenophases.map(p => {
         const existing = existingFormulas.find(f => f.phenophase_id === p.id);
@@ -139,16 +139,24 @@ export const Questions = () => {
   const updateQuestion = async (id: string) => {
     const payload: any = {
       text: editText,
-      order_index: editOrder, // сохраняем текущий порядок без изменений
+      order_index: editOrder,
       is_active: true,
       checklist_id: editChecklistId,
       image_url: editImageUrl || undefined,
     };
-    if (isSortControl) {
+    // Если вопрос не системный, то разрешаем менять формулы
+    const editingQuestion = questions.find(q => q.id === id);
+    const isSystem = !!editingQuestion?.technical_code;
+
+    if (isSortControl && !isSystem) {
       payload.formulas = editFormulas.filter(f => f.formula.trim() !== '');
       payload.formula = undefined;
-    } else {
+    } else if (!isSortControl && !isSystem) {
       payload.formula = editFormulaDefault || undefined;
+      payload.formulas = [];
+    } else {
+      // Для системных вопросов формулы не отправляем – они не редактируются
+      payload.formula = undefined;
       payload.formulas = [];
     }
     try {
@@ -249,86 +257,103 @@ export const Questions = () => {
 
       {loading && <p>Загрузка...</p>}
 
-      {questions.map(q => (
-        <div key={q.id} style={styles.item}>
-          {editingId === q.id ? (
-            <div style={{ flex: 1 }}>
-              <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-              <select
-                value={editChecklistId}
-                onChange={e => setEditChecklistId(e.target.value)}
-                style={styles.select}
-              >
-                {checklists.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <ImageUploader
-                imageUrl={editImageUrl}
-                onUpload={async (file) => {
-                  const url = await uploadImage(file);
-                  if (url) setEditImageUrl(url);
-                }}
-                onRemove={() => setEditImageUrl(undefined)}
-              />
+      {questions.map(q => {
+        const isSystem = !!q.technical_code;
 
-              {!isSortControl ? (
-                <input
-                  value={editFormulaDefault}
-                  onChange={e => setEditFormulaDefault(e.target.value)}
-                  placeholder="Формула"
-                  style={styles.input}
-                />
-              ) : (
-                <div style={styles.formulaList}>
-                  {phenophases.map(p => {
-                    const idx = editFormulas.findIndex(f => f.phenophase_id === p.id);
-                    const value = idx >= 0 ? editFormulas[idx].formula : '';
-                    const handleChange = (val: string) => {
-                      setEditFormulas(prev => {
-                        const copy = [...prev];
-                        if (idx >= 0) {
-                          copy[idx] = { ...copy[idx], formula: val };
-                        } else {
-                          copy.push({ phenophase_id: p.id, formula: val });
-                        }
-                        return copy;
-                      });
-                    };
-                    return (
-                      <div key={p.id} style={styles.formulaRow}>
-                        <span style={styles.phenoName}>{p.name}:</span>
-                        <input
-                          value={value}
-                          onChange={e => handleChange(e.target.value)}
-                          style={{ ...styles.input, flex: 1 }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <button onClick={() => updateQuestion(q.id)} style={styles.saveBtn}>Сохранить</button>
-              <button onClick={() => setEditingId(null)} style={styles.cancelBtn}>Отмена</button>
-            </div>
-          ) : (
-            <>
+        return (
+          <div key={q.id} style={styles.item}>
+            {editingId === q.id ? (
               <div style={{ flex: 1 }}>
-                <strong>{q.order_index}.</strong> {q.text}
-                {q.image_url && <img src={q.image_url} style={styles.thumb} alt="preview" />}
-                {q.formula && <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>}
-                {q.formulas && q.formulas.length > 0 && (
-                  <span style={{ color: '#6b7280', marginLeft: 8 }}>
-                    (формул: {q.formulas.length})
-                  </span>
+                <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
+                <select
+                  value={editChecklistId}
+                  onChange={e => setEditChecklistId(e.target.value)}
+                  style={styles.select}
+                >
+                  {checklists.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <ImageUploader
+                  imageUrl={editImageUrl}
+                  onUpload={async (file) => {
+                    const url = await uploadImage(file);
+                    if (url) setEditImageUrl(url);
+                  }}
+                  onRemove={() => setEditImageUrl(undefined)}
+                />
+
+                {/* Для системных вопросов не показываем формулы */}
+                {!isSystem && (
+                  <>
+                    {!isSortControl ? (
+                      <input
+                        value={editFormulaDefault}
+                        onChange={e => setEditFormulaDefault(e.target.value)}
+                        placeholder="Формула"
+                        style={styles.input}
+                      />
+                    ) : (
+                      <div style={styles.formulaList}>
+                        {phenophases.map(p => {
+                          const idx = editFormulas.findIndex(f => f.phenophase_id === p.id);
+                          const value = idx >= 0 ? editFormulas[idx].formula : '';
+                          const handleChange = (val: string) => {
+                            setEditFormulas(prev => {
+                              const copy = [...prev];
+                              if (idx >= 0) {
+                                copy[idx] = { ...copy[idx], formula: val };
+                              } else {
+                                copy.push({ phenophase_id: p.id, formula: val });
+                              }
+                              return copy;
+                            });
+                          };
+                          return (
+                            <div key={p.id} style={styles.formulaRow}>
+                              <span style={styles.phenoName}>{p.name}:</span>
+                              <input
+                                value={value}
+                                onChange={e => handleChange(e.target.value)}
+                                style={{ ...styles.input, flex: 1 }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
+
+                <button onClick={() => updateQuestion(q.id)} style={styles.saveBtn}>Сохранить</button>
+                <button onClick={() => setEditingId(null)} style={styles.cancelBtn}>Отмена</button>
               </div>
-              <button onClick={() => startEdit(q)} style={styles.editBtn}>✏️</button>
-              <button onClick={() => deleteQuestion(q.id)} style={styles.deleteBtn}>🗑️</button>
-            </>
-          )}
-        </div>
-      ))}
+            ) : (
+              <>
+                <div style={{ flex: 1 }}>
+                  <strong>{q.order_index}.</strong> {q.text}
+                  {q.image_url && <img src={q.image_url} style={styles.thumb} alt="preview" />}
+                  {q.formula && <span style={{ color: '#6b7280', marginLeft: 8 }}>[{q.formula}]</span>}
+                  {q.formulas && q.formulas.length > 0 && (
+                    <span style={{ color: '#6b7280', marginLeft: 8 }}>
+                      (формул: {q.formulas.length})
+                    </span>
+                  )}
+                  {isSystem && (
+                    <span style={{ marginLeft: 8, color: '#2563eb', fontSize: 12 }}>
+                      системный вопрос
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => startEdit(q)} style={styles.editBtn}>✏️</button>
+                {!isSystem && (
+                  <button onClick={() => deleteQuestion(q.id)} style={styles.deleteBtn}>🗑️</button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
 
       {!loading && questions.length === 0 && (
         <p>Нет активных вопросов для этого чек-листа.</p>

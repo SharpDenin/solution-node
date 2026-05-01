@@ -7,23 +7,27 @@ import (
 	"backend/internal/repository"
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
 type QuestionService struct {
-	questionRepo repository.QuestionRepository
-	formulaRepo  repository.QuestionFormulaRepository
+	questionRepo   repository.QuestionRepository
+	formulaRepo    repository.QuestionFormulaRepository
+	phenophaseRepo repository.PhenophaseRepository
 }
 
 func NewQuestionService(
 	questionRepo repository.QuestionRepository,
 	formulaRepo repository.QuestionFormulaRepository,
+	phenophaseRepo repository.PhenophaseRepository,
 ) *QuestionService {
 	return &QuestionService{
-		questionRepo: questionRepo,
-		formulaRepo:  formulaRepo,
+		questionRepo:   questionRepo,
+		formulaRepo:    formulaRepo,
+		phenophaseRepo: phenophaseRepo,
 	}
 }
 
@@ -150,7 +154,64 @@ func (s *QuestionService) Delete(ctx context.Context, id uuid.UUID) error {
 		return errors.New("question id is required")
 	}
 
+	existing, err := s.questionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if existing == nil {
+		return errors.New("question not found")
+	}
+
+	if existing.TechnicalCode != nil && strings.TrimSpace(*existing.TechnicalCode) != "" {
+		return errors.New("system question cannot be deleted")
+	}
+
 	return s.questionRepo.Delete(ctx, id)
+}
+
+func (s *QuestionService) GetByChecklistWithDefaults(
+	ctx context.Context,
+	checklistID uuid.UUID,
+	phenophaseID uuid.UUID,
+) ([]responses.QuestionResponse, error) {
+	if checklistID == uuid.Nil {
+		return nil, errors.New("checklist_id is required")
+	}
+
+	if phenophaseID == uuid.Nil {
+		return nil, errors.New("phenophase_id is required")
+	}
+
+	phenophase, err := s.phenophaseRepo.GetByID(ctx, phenophaseID)
+	if err != nil {
+		return nil, err
+	}
+
+	if phenophase == nil {
+		return nil, errors.New("phenophase not found")
+	}
+
+	questions, err := s.questionRepo.GetByChecklist(ctx, checklistID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]responses.QuestionResponse, 0, len(questions))
+
+	for _, question := range questions {
+		formulas, err := s.formulaRepo.GetByQuestion(ctx, question.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		response := mapQuestionToResponse(&question, formulas)
+		response.DefaultAnswer = resolveDefaultAnswer(&question, phenophase)
+
+		result = append(result, *response)
+	}
+
+	return result, nil
 }
 
 func (s *QuestionService) syncPhenophaseFormulas(
@@ -213,14 +274,16 @@ func mapQuestionToResponse(
 	formulas []models.QuestionPhenophaseFormula,
 ) *responses.QuestionResponse {
 	response := &responses.QuestionResponse{
-		ID:          question.ID,
-		Text:        question.Text,
-		OrderIndex:  question.OrderIndex,
-		IsActive:    question.IsActive,
-		ChecklistID: question.ChecklistID,
-		Formula:     question.Formula,
-		ImageURL:    question.ImageURL,
-		Formulas:    make([]responses.QuestionPhenophaseFormulaResponse, 0, len(formulas)),
+		ID:            question.ID,
+		Text:          question.Text,
+		OrderIndex:    question.OrderIndex,
+		IsActive:      question.IsActive,
+		ChecklistID:   question.ChecklistID,
+		Formula:       question.Formula,
+		ImageURL:      question.ImageURL,
+		TechnicalCode: question.TechnicalCode,
+		DefaultAnswer: nil,
+		Formulas:      make([]responses.QuestionPhenophaseFormulaResponse, 0, len(formulas)),
 	}
 
 	for _, formula := range formulas {
@@ -246,4 +309,37 @@ func normalizeOptionalString(value *string) *string {
 	}
 
 	return &trimmed
+}
+
+func resolveDefaultAnswer(
+	question *models.Question,
+	phenophase *models.Phenophase,
+) *string {
+	if question == nil || question.TechnicalCode == nil || phenophase == nil {
+		return nil
+	}
+
+	switch strings.TrimSpace(*question.TechnicalCode) {
+	case "min_critical_temperature":
+		return formatFloatPtr(phenophase.MinCriticalTemperature)
+
+	case "critical_temperature":
+		return formatFloatPtr(phenophase.CriticalTemperature)
+
+	default:
+		return nil
+	}
+}
+
+func formatFloatPtr(value *float64) *string {
+	if value == nil {
+		return nil
+	}
+
+	formatted := strings.TrimRight(strings.TrimRight(
+		strconv.FormatFloat(*value, 'f', 2, 64),
+		"0",
+	), ".")
+
+	return &formatted
 }

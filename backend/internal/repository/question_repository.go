@@ -62,6 +62,7 @@ func (r *questionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models
 			checklist_id,
 			formula,
 			image_url,
+			technical_code,
 			created_at
 		FROM questions
 		WHERE id = $1
@@ -77,6 +78,7 @@ func (r *questionRepository) GetByID(ctx context.Context, id uuid.UUID) (*models
 		&q.ChecklistID,
 		&q.Formula,
 		&q.ImageURL,
+		&q.TechnicalCode,
 		&q.CreatedAt,
 	)
 	if err != nil {
@@ -100,6 +102,7 @@ func (r *questionRepository) GetAll(ctx context.Context) ([]models.Question, err
 			checklist_id,
 			formula,
 			image_url,
+			technical_code,
 			created_at
 		FROM questions
 		ORDER BY order_index ASC
@@ -124,6 +127,7 @@ func (r *questionRepository) GetAll(ctx context.Context) ([]models.Question, err
 			&q.ChecklistID,
 			&q.Formula,
 			&q.ImageURL,
+			&q.TechnicalCode,
 			&q.CreatedAt,
 		)
 		if err != nil {
@@ -150,6 +154,7 @@ func (r *questionRepository) GetByChecklist(ctx context.Context, checklistID uui
 			checklist_id,
 			formula,
 			image_url,
+			technical_code,
 			created_at
 		FROM questions
 		WHERE checklist_id = $1
@@ -176,6 +181,7 @@ func (r *questionRepository) GetByChecklist(ctx context.Context, checklistID uui
 			&q.ChecklistID,
 			&q.Formula,
 			&q.ImageURL,
+			&q.TechnicalCode,
 			&q.CreatedAt,
 		)
 		if err != nil {
@@ -205,7 +211,7 @@ func (r *questionRepository) Update(ctx context.Context, q *models.Question) err
 		WHERE id = $7
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query,
+	commandTag, err := r.db.Pool.Exec(ctx, query,
 		q.Text,
 		q.OrderIndex,
 		q.IsActive,
@@ -214,8 +220,15 @@ func (r *questionRepository) Update(ctx context.Context, q *models.Question) err
 		q.ImageURL,
 		q.ID,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("question not found")
+	}
+
+	return nil
 }
 
 func (r *questionRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -225,6 +238,14 @@ func (r *questionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		WHERE id = $1
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query, id)
-	return err
+	commandTag, err := r.db.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("question not found")
+	}
+
+	return nil
 }

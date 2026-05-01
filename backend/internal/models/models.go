@@ -43,12 +43,14 @@ type Variety struct {
 }
 
 type Phenophase struct {
-	ID          uuid.UUID `db:"id"`
-	Name        string    `db:"name"`
-	Description *string   `db:"description"`
-	ImageURL    *string   `db:"image_url"`
-	OrderIndex  int       `db:"order_index"`
-	CreatedAt   time.Time `db:"created_at"`
+	ID                     uuid.UUID `db:"id"`
+	Name                   string    `db:"name"`
+	Description            *string   `db:"description"`
+	ImageURL               *string   `db:"image_url"`
+	OrderIndex             int       `db:"order_index"`
+	MinCriticalTemperature *float64  `db:"min_critical_temperature"`
+	CriticalTemperature    *float64  `db:"critical_temperature"`
+	CreatedAt              time.Time `db:"created_at"`
 }
 
 type Report struct {
@@ -64,14 +66,15 @@ type Report struct {
 }
 
 type Question struct {
-	ID          uuid.UUID `db:"id"`
-	Text        string    `db:"text"`
-	OrderIndex  int       `db:"order_index"`
-	IsActive    bool      `db:"is_active"`
-	ChecklistID uuid.UUID `db:"checklist_id"`
-	Formula     *string   `db:"formula"`
-	ImageURL    *string   `db:"image_url"`
-	CreatedAt   time.Time `db:"created_at"`
+	ID            uuid.UUID `db:"id"`
+	Text          string    `db:"text"`
+	OrderIndex    int       `db:"order_index"`
+	IsActive      bool      `db:"is_active"`
+	ChecklistID   uuid.UUID `db:"checklist_id"`
+	Formula       *string   `db:"formula"`
+	ImageURL      *string   `db:"image_url"`
+	TechnicalCode *string   `db:"technical_code"`
+	CreatedAt     time.Time `db:"created_at"`
 }
 
 type QuestionPhenophaseFormula struct {

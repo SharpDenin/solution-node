@@ -27,8 +27,15 @@ func NewPhenophaseRepository(db *DB) PhenophaseRepository {
 
 func (r *phenophaseRepository) Create(ctx context.Context, p *models.Phenophase) error {
 	query := `
-		INSERT INTO phenophases (name, description, image_url, order_index)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO phenophases (
+			name,
+			description,
+			image_url,
+			order_index,
+			min_critical_temperature,
+			critical_temperature
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at
 	`
 
@@ -37,12 +44,22 @@ func (r *phenophaseRepository) Create(ctx context.Context, p *models.Phenophase)
 		p.Description,
 		p.ImageURL,
 		p.OrderIndex,
+		p.MinCriticalTemperature,
+		p.CriticalTemperature,
 	).Scan(&p.ID, &p.CreatedAt)
 }
 
 func (r *phenophaseRepository) GetAll(ctx context.Context) ([]models.Phenophase, error) {
 	query := `
-		SELECT id, name, description, image_url, order_index, created_at
+		SELECT 
+			id,
+			name,
+			description,
+			image_url,
+			order_index,
+			min_critical_temperature,
+			critical_temperature,
+			created_at
 		FROM phenophases
 		ORDER BY order_index ASC
 	`
@@ -64,6 +81,8 @@ func (r *phenophaseRepository) GetAll(ctx context.Context) ([]models.Phenophase,
 			&p.Description,
 			&p.ImageURL,
 			&p.OrderIndex,
+			&p.MinCriticalTemperature,
+			&p.CriticalTemperature,
 			&p.CreatedAt,
 		)
 		if err != nil {
@@ -78,7 +97,15 @@ func (r *phenophaseRepository) GetAll(ctx context.Context) ([]models.Phenophase,
 
 func (r *phenophaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Phenophase, error) {
 	query := `
-		SELECT id, name, description, image_url, order_index, created_at
+		SELECT 
+			id,
+			name,
+			description,
+			image_url,
+			order_index,
+			min_critical_temperature,
+			critical_temperature,
+			created_at
 		FROM phenophases
 		WHERE id = $1
 	`
@@ -91,6 +118,8 @@ func (r *phenophaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 		&p.Description,
 		&p.ImageURL,
 		&p.OrderIndex,
+		&p.MinCriticalTemperature,
+		&p.CriticalTemperature,
 		&p.CreatedAt,
 	)
 
@@ -110,19 +139,30 @@ func (r *phenophaseRepository) Update(ctx context.Context, p *models.Phenophase)
 		SET name = $1,
 		    description = $2,
 		    image_url = $3,
-		    order_index = $4
-		WHERE id = $5
+		    order_index = $4,
+		    min_critical_temperature = $5,
+		    critical_temperature = $6
+		WHERE id = $7
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query,
+	commandTag, err := r.db.Pool.Exec(ctx, query,
 		p.Name,
 		p.Description,
 		p.ImageURL,
 		p.OrderIndex,
+		p.MinCriticalTemperature,
+		p.CriticalTemperature,
 		p.ID,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("phenophase not found")
+	}
+
+	return nil
 }
 
 func (r *phenophaseRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -131,6 +171,14 @@ func (r *phenophaseRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		WHERE id = $1
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query, id)
-	return err
+	commandTag, err := r.db.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("phenophase not found")
+	}
+
+	return nil
 }

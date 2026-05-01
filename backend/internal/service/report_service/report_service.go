@@ -1,6 +1,7 @@
 package report_service
 
 import (
+	"backend/internal/models"
 	"backend/internal/models/dtos"
 	"backend/internal/repository"
 	"context"
@@ -90,6 +91,8 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 		varietyID = &parsedVarietyID
 	}
 
+	var selectedPhenophase *models.Phenophase
+
 	var phenophaseID *uuid.UUID
 	if req.PhenophaseID != nil && strings.TrimSpace(*req.PhenophaseID) != "" {
 		parsedPhenophaseID, err := uuid.Parse(*req.PhenophaseID)
@@ -97,10 +100,12 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 			return errors.New("invalid phenophase id")
 		}
 
-		if _, err := s.phenophaseRepo.GetByID(ctx, parsedPhenophaseID); err != nil {
+		phenophase, err := s.phenophaseRepo.GetByID(ctx, parsedPhenophaseID)
+		if err != nil {
 			return errors.New("phenophase not found")
 		}
 
+		selectedPhenophase = phenophase
 		phenophaseID = &parsedPhenophaseID
 	}
 
@@ -178,7 +183,7 @@ func (s *ReportService) CreateReport(ctx context.Context, userID string, req dto
 			}
 		}
 
-		result := evaluateAnswer(formula, ans.AnswerText)
+		result := evaluateReportAnswer(question, formula, ans.AnswerText, selectedPhenophase)
 
 		err = s.reportRepo.CreateAnswer(
 			ctx,
@@ -301,4 +306,64 @@ func canCreateReportForChecklist(userRoleID uuid.UUID, roleName string, checklis
 	}
 
 	return userRoleID == checklistRoleID
+}
+
+func evaluateReportAnswer(
+	question *models.Question,
+	formula *string,
+	answerText string,
+	phenophase *models.Phenophase,
+) *string {
+	if question == nil {
+		return evaluateAnswer(formula, answerText)
+	}
+
+	if question.TechnicalCode != nil {
+		switch strings.TrimSpace(*question.TechnicalCode) {
+		case "actual_temperature":
+			return evaluateActualTemperature(answerText, phenophase)
+
+		case "min_critical_temperature", "critical_temperature":
+			neutral := "neutral"
+			return &neutral
+		}
+	}
+
+	return evaluateAnswer(formula, answerText)
+}
+
+func evaluateActualTemperature(answerText string, phenophase *models.Phenophase) *string {
+	if phenophase == nil ||
+		phenophase.MinCriticalTemperature == nil ||
+		phenophase.CriticalTemperature == nil {
+		neutral := "neutral"
+		return &neutral
+	}
+
+	actual, err := strconv.ParseFloat(
+		strings.ReplaceAll(strings.TrimSpace(answerText), ",", "."),
+		64,
+	)
+	if err != nil {
+		neutral := "neutral"
+		return &neutral
+	}
+
+	first := *phenophase.MinCriticalTemperature
+	second := *phenophase.CriticalTemperature
+
+	lower := first
+	upper := second
+
+	if lower > upper {
+		lower, upper = upper, lower
+	}
+
+	if actual > lower && actual < upper {
+		good := "good"
+		return &good
+	}
+
+	bad := "bad"
+	return &bad
 }

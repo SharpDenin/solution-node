@@ -9,24 +9,27 @@ ALTER TABLE questions
 
 UPDATE questions q
 SET technical_code = 'actual_temperature'
-    FROM checklists c
+FROM checklists c
 WHERE q.checklist_id = c.id
   AND c.code = 'sort_control'
+  AND q.is_active = true
   AND q.technical_code IS NULL
   AND q.order_index = 2;
 
 UPDATE questions q
 SET technical_code = 'min_critical_temperature'
-    FROM checklists c
+FROM checklists c
 WHERE q.checklist_id = c.id
   AND c.code = 'sort_control'
+  AND q.is_active = true
   AND q.technical_code IS NULL
   AND q.order_index = 3;
 
 UPDATE questions q
 SET technical_code = 'critical_temperature'
-    FROM checklists c
+FROM checklists c
 WHERE q.checklist_id = c.id
   AND c.code = 'sort_control'
+  AND q.is_active = true
   AND q.technical_code IS NULL
   AND q.order_index = 4;

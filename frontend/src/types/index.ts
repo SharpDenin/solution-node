@@ -15,6 +15,8 @@ export interface Question {
   formula?: string;
   image_url?: string;
   formulas?: QuestionPhenophaseFormula[];
+  technical_code?: string | null;
+  default_answer?: string | null;
 }
 
 export interface QuestionPhenophaseFormula {
@@ -88,6 +90,8 @@ export interface Phenophase {
   image_url?: string;
   order_index: number;
   created_at?: string;
+  min_critical_temperature?: number | null;
+  critical_temperature?: number | null;
 }
 
 export interface PhenophaseMatrixReportResponse {

@@ -333,9 +333,7 @@ func evaluateReportAnswer(
 }
 
 func evaluateActualTemperature(answerText string, phenophase *models.Phenophase) *string {
-	if phenophase == nil ||
-		phenophase.MinCriticalTemperature == nil ||
-		phenophase.CriticalTemperature == nil {
+	if phenophase == nil || phenophase.MinCriticalTemperature == nil {
 		neutral := "neutral"
 		return &neutral
 	}
@@ -349,17 +347,9 @@ func evaluateActualTemperature(answerText string, phenophase *models.Phenophase)
 		return &neutral
 	}
 
-	first := *phenophase.MinCriticalTemperature
-	second := *phenophase.CriticalTemperature
+	minCritical := *phenophase.MinCriticalTemperature
 
-	lower := first
-	upper := second
-
-	if lower > upper {
-		lower, upper = upper, lower
-	}
-
-	if actual > lower && actual < upper {
+	if actual > minCritical {
 		good := "good"
 		return &good
 	}

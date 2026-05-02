@@ -175,7 +175,7 @@ export const PhenophaseManagePage = () => {
                 step="0.1"
                 value={critTemp}
                 onChange={e => setCritTemp(e.target.value)}
-                placeholder="Например: 7"
+                placeholder="Например: -7"
                 style={styles.input}
               />
             </div>

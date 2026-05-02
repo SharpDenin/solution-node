@@ -137,16 +137,23 @@ export const Questions = () => {
   };
 
   const updateQuestion = async (id: string) => {
+    const editingQuestion = questions.find(q => q.id === id);
+    const isSystem = !!editingQuestion?.technical_code;
+
     const payload: any = {
       text: editText,
       order_index: editOrder,
       is_active: true,
-      checklist_id: editChecklistId,
       image_url: editImageUrl || undefined,
     };
-    // Если вопрос не системный, то разрешаем менять формулы
-    const editingQuestion = questions.find(q => q.id === id);
-    const isSystem = !!editingQuestion?.technical_code;
+
+    // Для несистемных вопросов разрешена смена чек-листа
+    if (!isSystem) {
+      payload.checklist_id = editChecklistId;
+    } else {
+      // Оставляем оригинальный checklist_id (не меняем)
+      payload.checklist_id = editingQuestion?.checklist_id;
+    }
 
     if (isSortControl && !isSystem) {
       payload.formulas = editFormulas.filter(f => f.formula.trim() !== '');
@@ -155,10 +162,11 @@ export const Questions = () => {
       payload.formula = editFormulaDefault || undefined;
       payload.formulas = [];
     } else {
-      // Для системных вопросов формулы не отправляем – они не редактируются
+      // Для системных вопросов не передаём формулы
       payload.formula = undefined;
       payload.formulas = [];
     }
+
     try {
       await api.put(`/api/questions/${id}`, payload);
       setEditingId(null);
@@ -265,15 +273,20 @@ export const Questions = () => {
             {editingId === q.id ? (
               <div style={{ flex: 1 }}>
                 <input value={editText} onChange={e => setEditText(e.target.value)} style={styles.input} />
-                <select
-                  value={editChecklistId}
-                  onChange={e => setEditChecklistId(e.target.value)}
-                  style={styles.select}
-                >
-                  {checklists.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                
+                {/* Смена чек-листа разрешена только для несистемных вопросов */}
+                {!isSystem && (
+                  <select
+                    value={editChecklistId}
+                    onChange={e => setEditChecklistId(e.target.value)}
+                    style={styles.select}
+                  >
+                    {checklists.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+
                 <ImageUploader
                   imageUrl={editImageUrl}
                   onUpload={async (file) => {
@@ -283,7 +296,7 @@ export const Questions = () => {
                   onRemove={() => setEditImageUrl(undefined)}
                 />
 
-                {/* Для системных вопросов не показываем формулы */}
+                {/* Формулы скрыты для системных вопросов */}
                 {!isSystem && (
                   <>
                     {!isSortControl ? (

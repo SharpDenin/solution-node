@@ -332,6 +332,8 @@ func evaluateReportAnswer(
 	return evaluateAnswer(formula, answerText)
 }
 
+//
+
 func evaluateActualTemperature(answerText string, phenophase *models.Phenophase) *string {
 	if phenophase == nil || phenophase.MinCriticalTemperature == nil {
 		neutral := "neutral"
